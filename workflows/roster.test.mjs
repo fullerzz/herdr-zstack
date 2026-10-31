@@ -214,3 +214,21 @@ test('ownership changed during acceptance cannot approve itself', { timeout: 500
     await rm(checkout, { recursive: true, force: true });
   }
 });
+
+test('members must have distinct resolved task-record paths', async () => {
+  const { checkout, run } = await scratchRun();
+  try {
+    await symlink('a', join(checkout, '.herdr-tasks', 'alias'));
+    const collisions = [
+      [member('WorkerA', ['a.txt'], checkout), member('workera', ['b.txt'], checkout)],
+      [member('a', ['a.txt'], checkout), member('alias', ['b.txt'], checkout)],
+    ];
+    for (const members of collisions) {
+      const unsafe = { ...run, sequence: 2, members };
+      assert.match(validateRun(unsafe).join(), /duplicate member record/);
+      await assert.rejects(writeRun(runPath(run), unsafe,
+        { writer: 'parent', expectedSequence: 1 }), /duplicate member record/);
+    }
+    assert.equal(JSON.parse(await readFile(runPath(run))).sequence, 1);
+  } finally { await rm(checkout, { recursive: true, force: true }); }
+});

@@ -422,3 +422,13 @@ Limits: validation observes local filesystem state; it does not prevent a worker
 from changing symlinks after validation. Revalidate immediately before launch,
 keep targets stable while workers run, and inspect actual edits. Conservative
 case folding also rejects case-only distinctions on case-sensitive filesystems.
+
+### Review follow-up: unique member record targets
+
+The current-head review found that distinct member IDs could resolve to the same
+record through case differences or symlinked evidence directories. Scope
+validation now rejects duplicate resolved member-record paths before a run can be
+persisted. The regression covers both cases and verifies that a rejected update
+leaves the existing index unchanged. It failed before the fix; all 74 Node tests
+pass afterward on Node 24.22.2. `git diff --check` passed. No mod code changed and
+no live worker pilot was rerun for this follow-up.

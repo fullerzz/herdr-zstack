@@ -67,7 +67,9 @@ export function validateRun(run) {
 export function scopeConflicts(run) {
   const conflicts = [];
   const coordinatorCheckout = scopePath(run.checkout);
-  const protectedPaths = run.members.map(member => scopePath(recordPath(member))).concat(scopePath(runPath(run)));
+  const memberRecords = run.members.map(member => scopePath(recordPath(member)));
+  if (new Set(memberRecords).size !== memberRecords.length) conflicts.push('duplicate member record paths');
+  const protectedPaths = memberRecords.concat(scopePath(runPath(run)));
   const members = run.members.map(member => ({ ...member, checkout: scopePath(member.checkout),
     writes: member.writes.map(path => scopePath(join(member.checkout, path))) }));
   members.forEach((member, index) => {
