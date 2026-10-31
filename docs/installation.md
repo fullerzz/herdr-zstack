@@ -59,6 +59,22 @@ explicit-only, and neither installs a hook or activates a mode. zstack's session
 hook resolves the companion only after the user selects Herdr. A missing or
 ambiguous install is a capability gap.
 
+With [just](https://just.systems/) installed, run these from this checkout:
+
+```sh
+just install-codex
+just update-codex
+just install-claude-code
+just update-claude-code
+```
+
+Run the install recipe once for each host, then its update recipe after changing
+or pulling this checkout. These recipes use the local checkout; they do not pull
+Git changes. Plain `just` lists the recipes. Restart the host session after an
+install or update; Claude Code also supports `/reload-plugins`.
+
+The equivalent manual installation commands follow.
+
 For Claude Code, add this checkout as a directory marketplace, then install the
 plugin:
 
@@ -67,9 +83,69 @@ claude plugin marketplace add /absolute/path/to/herdr-zstack
 claude plugin install herdr-zstack@herdr-zstack-local
 ```
 
-`claude plugin validate .` checks the manifests. Codex installation of the
-companion has not been exercised. Do not copy the skill into personal
-configuration to work around that.
+`claude plugin validate .` checks the manifests.
+
+For Codex CLI, register this checkout as a local marketplace, then install the
+plugin. These commands use the syntax checked with Codex CLI 0.166.0:
+
+```sh
+codex plugin marketplace add /absolute/path/to/herdr-zstack
+codex plugin add herdr-zstack@herdr-zstack-local
+codex plugin list --marketplace herdr-zstack-local
+```
+
+Codex reuses this checkout's `.claude-plugin/marketplace.json` catalog and loads
+the plugin's `.codex-plugin/plugin.json` manifest. See OpenAI's
+[local marketplace documentation](https://developers.openai.com/plugins/build/plugins#how-local-marketplaces-work).
+Start a new Codex session after installation and confirm both companion skills
+are available. Installation does not select Herdr execution or authorize workers.
+
+Local installation was checked with isolated Codex and Claude Code configuration
+directories; Codex reinstallation also refreshed changed files at the same plugin
+version. Live skill discovery has not been exercised. Do not copy the skills into
+personal configuration to work around a discovery failure.
+
+### Install from GitHub
+
+For a fresh installation without a local checkout, register the public repository
+URL. Both sources use the marketplace name `herdr-zstack-local`; the `just`
+recipes above use the local checkout. These commands do not migrate an existing
+local registration.
+
+For Codex:
+
+```sh
+codex plugin marketplace add https://github.com/fullerzz/herdr-zstack.git
+codex plugin add herdr-zstack@herdr-zstack-local
+```
+
+To update the GitHub installation, fetch the marketplace before reinstalling:
+
+```sh
+codex plugin marketplace upgrade herdr-zstack-local
+codex plugin add herdr-zstack@herdr-zstack-local
+```
+
+For Claude Code:
+
+```sh
+claude plugin marketplace add https://github.com/fullerzz/herdr-zstack.git
+claude plugin install herdr-zstack@herdr-zstack-local
+```
+
+To update:
+
+```sh
+claude plugin marketplace update herdr-zstack-local
+claude plugin update herdr-zstack@herdr-zstack-local
+```
+
+Restart the host session after installation or updating. Claude Code also supports
+`/reload-plugins`. These commands were checked with isolated configuration
+directories against public repository revision `ebec254`; live skill discovery
+remains unverified.
+
+### Presentation and verification
 
 For presentation, follow [the portable recipe](../examples/layout-recipe.md).
 The mod's `place: none` does not activate a layout.

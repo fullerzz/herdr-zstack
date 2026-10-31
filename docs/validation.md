@@ -432,3 +432,35 @@ persisted. The regression covers both cases and verifies that a rejected update
 leaves the existing index unchanged. It failed before the fix; all 74 Node tests
 pass afterward on Node 24.22.2. `git diff --check` passed. No mod code changed and
 no live worker pilot was rerun for this follow-up.
+
+## Local plugin installation recipes — 2026-10-31
+
+Checked CLI help with Codex 0.166.0 and Claude Code 2.1.316. Using copied plugin
+sources and temporary `CODEX_HOME` / `CLAUDE_CONFIG_DIR` directories, both hosts
+successfully registered the local marketplace and installed the plugin. Repeating
+Codex's `plugin add` copied a changed file at the same plugin version. Claude's
+marketplace and plugin update commands succeeded; its plugin update reported
+that the local source folder is read at the next session start or
+`/reload-plugins`, rather than refreshing the cached copy immediately.
+
+No personal plugin configuration was changed. These CLI checks do not prove live
+skill discovery or execution. The temporary sources and configuration directories
+were removed afterward. With just 1.59.0, recipe listing, dry runs of all four
+install/update recipes, and `just --fmt --check` passed. Plain `just` lists the
+recipes. `git diff --check` passed.
+
+## Public GitHub plugin installation — 2026-10-31
+
+With Git credential helpers and interactive credential prompts disabled, both
+Codex 0.166.0 and Claude Code 2.1.316 successfully registered
+`https://github.com/fullerzz/herdr-zstack.git` and installed
+`herdr-zstack@herdr-zstack-local` at version 0.1.0. Public HEAD was `ebec254`.
+Both installed plugin directories contained `hc-workflow` and `single-worker`
+skill files. Codex's named marketplace upgrade and subsequent plugin add passed;
+Claude's named marketplace update and plugin update passed, reporting version
+0.1.0 already current.
+
+The checks used temporary `CODEX_HOME` and `CLAUDE_CONFIG_DIR` directories, which
+were removed afterward. No personal source registration was changed. This proves
+fresh GitHub installation and update commands against the current revision;
+upgrading to a newer plugin release and live skill discovery were not exercised.
