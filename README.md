@@ -4,10 +4,13 @@ Herdr-specific workflows and native UI for zstack. This repository owns integrat
 
 ## Available now
 
-- [Task & Evidence](mods/task-evidence/README.md): read-only task notes and artifact viewer with separate live space activity.
-- Seven behavioral tests, including real host configuration access, stale reads, and remote routing guards.
+- [Task & Evidence](mods/task-evidence/README.md): explicit task selection, read-only brief/artifacts/handoff, receipt snapshots, and separate ownership-unverified live activity.
+- [Execution contract](docs/execution-contract.md): native operation matrix, capability preflight, zstack compatibility, and single-worker ownership boundaries.
+- [Task records and revision receipts](docs/task-record.md): shared schema, coordinator writer, local revision observation, and fail-closed acceptance checks.
+- [Installation](docs/installation.md): reproducible namespaced mod installation, personal layout recipe, and CI checks.
+- [Worker lifecycle](docs/worker-lifecycle.md): scoped single-worker execution and pause/pickup reconciliation, with [local pilot evidence](docs/validation.md#issue-3-single-worker-hc-pilot--2026-10-31) and [recovery proof limits](docs/validation.md#issue-4-pause-and-pickup-reconciliation--2026-10-31).
 
-The initial migration does not yet provide an orchestration skill, plugin installer, automatic task registration, or a shared task-record protocol. Those are future work, not activated capabilities.
+Installation does not activate z-mode or Herdr execution. Task registration and selection remain explicit; live pilot evidence and runtime limits are recorded in [validation](docs/validation.md).
 
 ## Develop
 
@@ -20,7 +23,7 @@ Herdr supplies `gpui-kit`, `gpui-base`, and `herdr` at runtime; do not install t
 
 ## Install locally
 
-Follow the [mod guide](mods/task-evidence/README.md). Copy the three runtime files into a new personal mod folder, then add its block to a personal layout clone. Inspect an existing destination before updating it. Installed files are copies; source edits require resync. No installation happens from running tests.
+Follow the [installation guide](docs/installation.md) and [mod configuration guide](mods/task-evidence/README.md). The installer copies all runtime modules to `zstack-task-evidence`; add its block to a personal layout clone. Installed files are copies; source edits require an explicit update. No installation happens from running tests.
 
 For the initial development setup, `personal-task-evidence` is a copy of the existing personal layout; switching back to `personal` restores the previous presentation. Task paths are explicit and the viewer does not infer success from agent status.
 

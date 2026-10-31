@@ -4,3 +4,4 @@ node_modules/
 mods/*/*.d.ts
 mods/*/jsconfig.json
 mods/*/*.error
+.herdr-tasks/

@@ -26,3 +26,13 @@ test("activity requires unique explicit space or folder and machine match", () =
   assert.equal(taskSpace({ space: "remote/id" }, [local, remote]), remote);
   assert.equal(taskSpace({}, [local]), null);
 });
+
+test('record file roles and explicit choices preserve manual mode', async () => {
+  const {taskChoices,recordFiles,taskActivity} = await import(`data:text/javascript;base64,${Buffer.from(source).toString('base64')}`);
+  assert.deepEqual(taskChoices({}),[]);
+  assert.deepEqual(taskChoices({tasks:[null, 3, {record:'relative'}, {record:'/task.json'}]}),[{record:'/task.json'}]);
+  assert.deepEqual(recordFiles({checkout:'/repo',brief:'brief.md',handoff:'handoff.md',artifacts:['check.log'],receipt:{evidence:['receipt.md']}}).map(f=>f.path),['/repo/brief.md','/repo/check.log','/repo/receipt.md','/repo/handoff.md']);
+  const live=[{address:'t1',space:'s',status:'done'}];
+  assert.deepEqual(taskActivity({worker:{core:'c',terminal:'t1',occupant:'session'}},live).owned,[]);
+  assert.deepEqual(taskActivity(null,live).unverified,live);
+});

@@ -1,5 +1,17 @@
 # Validation
 
+## Issue 1: execution contract — 2026-10-31
+
+Documentation-only capability baseline; no worker was launched and no session controls were enabled.
+
+- Installed `hc --version`: 0.1.15; `hc server status`: running core 0.1.15. Inspected `hc --skill`, top-level help, and `run`, `wait`, and `get` help.
+- Installed `herdr-app --version`: 0.1.10. Inspected `--skill`, `--help`, generated app guide and relevant generated type headers. `herdr-app status` reported the existing `personal-task-evidence` layout with no errors; no presentation changes or screenshot inspection were performed.
+- Read installed zstack 0.22.0 z-mode, native-host contract, and Herdr workflow/operations. Shared semantics remain authoritative; the execution contract explicitly bounds the legacy TUI command incompatibility.
+- This worker had `HERDR_ENV=1` but no `HC_TERMINAL_ID`; parent-linked dispatch was not verified. The contract also permits an explicitly parentless standalone coordinator with recorded ownership and cleanup responsibilities. No focused terminal was adopted as a substitute.
+- `git diff --check` passed for the documentation change. Links were checked against their target files. Mod tests and native rendering checks were not rerun because this slice changes no mod behavior.
+
+Limits: templates, CLI model/effort settings, permission enforcement, first-message delivery, live worker completion, remote execution, pause/cleanup and restart recovery remain untested by this slice. Status discovery proves connectivity, not task acceptance. The later pilot must provide those relevant runtime checks before claiming a working worker flow.
+
 ## Initial migration — 2026-10-31
 
 Migration accepted locally. Runtime files and tests were transferred byte-for-byte; no new execution behavior was introduced.
@@ -15,3 +27,129 @@ Recovery copy of the original mod (including generated local files) and pre-migr
 Historical evidence before migration: all seven focused tests and the native mod checker passed. Live task notes, scoped Codex activity, artifact navigation, and manual refresh were verified in the personal-task-evidence layout. A host initialization bug was fixed by reading herdr.props(), with a regression modeling undefined root init props.
 
 Limits: remote reads have unit coverage only. Windows paths, theme switching, and restart recovery have not been tested live. Native children without core terminals are absent from the activity list. Activity covers a linked space, not proof of task ownership. The panel is explicitly configured and refreshed manually.
+
+## Issue 2: task records and receipts — 2026-10-31
+
+The pure shared schema, coordinator writer and local revision observer are implemented. Six schema/store tests passed, including atomic writes and stale-sequence refusal in a temporary directory, real scratch Git staged/unstaged/untracked revision changes, task-evidence exclusion, malformed field types, and acceptance requiring independent machine/checkout/revision agreement. Independent integration review also fixed preservation of existing malformed JSON primitives and rejected nested checkout observations that could miss dirty siblings. Fixtures cover active, completed-unverified, accepted, stale, missing-worker and malformed records. The UI imports only pure helpers, never the writer or Git observer.
+
+Limits: the writer is local-filesystem coordination, not authenticated distributed ownership. Git observations require frozen writers and exclude ignored inputs/submodule interiors; see [task-record policy](task-record.md).
+
+## Issue 3: single-worker hc pilot — 2026-10-31
+
+The bounded local pilot completed through the [worker lifecycle](worker-lifecycle.md): one delivered assignment, collected report, independent coordinator verification, revision-bound acceptance and exact-owned-process cleanup. Installed versions were hc/core 0.1.15, herdr-app 0.1.10 and interactive Codex 0.166.0; the worker used `gpt-6.1-sol` with low effort.
+
+- Isolated checkout: `/private/tmp/herdr-zstack-pilot-20261031`; task `hc-pilot-20261031`. Authorized writes were `pilot-result.txt` and `.herdr-tasks/pilot/report.md`. The collected screen shows the brief and exact-content assertion, and the report records exit code 0. The worker did not invoke hc itself; the coordinator owned launch, collection and cleanup.
+- Terminal t18 stopped at the folder-trust dialog before task delivery and was killed and removed. After specific scratch-folder trust authorization, a fresh assignment reached t19 once; it completed and was killed and removed after collection. Before each kill, the coordinator rechecked the exact PID, process start time and executable. The saved core binding augments the permanent core ID with core process start identity; it does not claim an API-provided restart epoch.
+- With the worker stopped, the coordinator checked write scope and asserted that `pilot-result.txt` was exactly `hc pilot verified` plus one newline. Before/after snapshots matched commit `c5f1a96508ad1e5eefb2062a5b7169c57549e6af` and digest `sha256:617d8e0f302163fafaa64d96cf6258a8242528403bea0583f20b130c5e7aa007`. Record sequence 5 retains the accepted receipt and completed activity and points to the final narrative `handoff.md`; this evidence-only update left the observed revision unchanged.
+- Evidence inspected under `.herdr-tasks/pilot/`: `record.json`, `final-handoff.json`, `coordinator-check.json`, `collected-screen.txt`, `mcp-check.json`, `report.md`, `occupant.txt` and `core-process.txt`. These are local temporary evidence, not portable test dependencies; this section preserves their non-secret conclusions.
+
+Limits: scratch-folder trust persists for that authorized directory. All discovered MCP servers were disabled. Explicit workspace-write/on-request launch settings used no bypass flags, but the managed UI displayed Custom permissions / Approve for me; this does not prove a separate manual-only approval policy or adversarial permission enforcement. Labels and status alone do not prove ownership. This pilot establishes the bounded local flow, not remote execution, portable session identity or all recovery acceptance.
+
+## Issue 4: pause and pickup reconciliation — 2026-10-31
+
+The explicit operator workflow and pure lifecycle helpers implement launch-once decisions, exact binding reconciliation, scoped pause proposals, fail-closed acceptance and sequence-checked coordinator receipt integration. Eight isolated fixture tests in `workflows/worker-lifecycle.test.mjs` passed. They cover surviving work after simulated app closure, lost core/worker identity, reused addresses/fresh shells, stale sessions, checkout or digest changes, unavailable machines, ambiguous delivery, unknown host state and changed verification snapshots. No fixture sends input or signals a process.
+
+The live pilot supplies process accounting and a final handoff for both owned attempts: neither remains a writer, acceptance is bound to the tested dirty revision, and pickup explicitly requires fresh authority and process-start evidence with no replay. It does not supply a live interruption/resumption or restart test.
+
+Limits: app closure, core restart and remote failure were simulated, not induced on the user's runtime. No live host-persistence claim is made. Issue 4's implementation and fixture coverage are complete; live restart/persistence acceptance remains unverified and must use isolated task-owned runtime state. See [recovery checks and proof limits](worker-lifecycle.md#recovery-checks-and-proof-limits).
+
+## Issue 5: task-connected panel — 2026-10-31
+
+Explicit task choices now read schema records and expose brief, artifacts, receipt evidence and handoff. Receipt decisions are snapshots; absent independent current revision observation remains unverified, while record/receipt mismatch is stale. Saved worker core/terminal/occupant bindings are displayed. The installed AgentInfo lacks core and stable occupant identity, so all linked-space live activity remains ownership unverified. Address equality does not establish task ownership.
+
+Panel tests cover explicit selection and refresh generation races, missing/malformed/unavailable records, stale receipts, file-role resolution, malformed task-choice config, manual file reads, remote routing guards and unavailable ownership identity. Final `node --test` passed all 30 integrated tests on Node 24.22.2, both in the working tree and a clean source export without generated host files. `herdr-app check mods/task-evidence` and `git diff --check` passed after the final sidebar fix. The checker proves initial rendering only.
+
+Live QA rendered first in disposable app home `/private/tmp/herdr-zstack-panel-qa-20261031`. Because computer control attached to the existing app window, click tests used a uniquely named temporary mod/layout in that window; existing personal files were preserved. Verified ALPHA/BETA selection, the real pilot record with its actual receipt and coordinator evidence, long-artifact scrolling through paragraph 99, disk-update refresh, and layout switching. Only the task record path was configured for the pilot; its artifact paths came from the record.
+
+The 360px sidebar test found that long worker bindings and artifact selectors pushed document content out of reach. The fix gives metadata/selectors and document content separate bounded scroll regions, with Refresh fixed above them. A render-tree regression and live scrolling confirmed all pilot artifact controls and the final Markdown handoff remain reachable. Screenshot: `/private/tmp/herdr-zstack-panel-qa-20261031/verified-sidebar.png` (temporary local evidence).
+
+The disposable app was quit. Temporary personal QA files were archived under the disposable home, and the original `personal-task-evidence` layout, space, tab, focused pane and t16 selection were restored; app status reported no errors. No unrelated terminal was changed. Remote UI reads and restart recovery remain unit/simulation coverage only; the panel cannot establish live occupant identity or current Git acceptance from this host API.
+
+## Issue 6: installation and CI — 2026-10-31
+
+Five installer tests passed in disposable homes: preview/apply/idempotency/update/removal/rollback, unrelated-file preservation, ownership collisions, edited-file refusal, symlink boundaries, malformed manifests, obsolete-module cleanup, failed-state-write recovery and transaction-lock refusal. The namespaced install includes all sibling runtime JavaScript modules. Existing personal layouts and keybindings are never rewritten. The QA home was installed through the same explicit installer.
+
+CI configuration is authored, not remotely executed. The Node 24 clean-source-export check passed all 30 tests, and no generated host files are tracked. Installer tests never targeted personal configuration; the separate temporary live-panel setup above was archived afterward. No publication or commit was performed. See [installation](installation.md) for the explicit local transaction and rollback contract.
+
+## Review fixes — 2026-10-31
+
+The revision observer and installer findings were reproduced with failing
+regressions before implementation. With the fixes, Node 24.22.2 `node --test`
+passes all 37 tests, including hidden tracked edits (`assume-unchanged` and
+`skip-worktree`), executable changes with `core.filemode=false`, CRLF conversion
+under `core.autocrlf` and `.gitattributes`, hardlinked backups during update and
+rollback, and replacement during failed-transaction recovery. `git diff --check`
+passes.
+
+The original review repro scripts were rerun against the current helpers:
+unchanged input remains accepted; hidden content, mode and line-ending changes
+now produce stale acceptance. The installer update leaves the unrelated
+hardlinked backup's original bytes intact.
+
+The observer now always hashes raw inputs. Earlier pilot receipts are historical
+and require new verification with this observer before current acceptance.
+These fixes change coordinator/installer Node helpers, tests and documentation;
+no mod runtime code changed in this follow-up. The native checker, live UI and
+remote CI were not rerun for this follow-up. No personal app installation was
+changed.
+
+## Closeout pilot and acceptance map — 2026-10-31
+
+A fresh, single `gpt-6.1-sol` low-effort worker ran through hc 0.1.15 with
+Codex 0.166.0, `--no-daemon --sandbox workspace-write --ask-for-approval never`.
+Plugins/apps and all discovered MCP servers were disabled for that invocation.
+The effective terminal UI and worker policy both reported `never`; no personal
+permission settings were changed. The earlier pilot's `on-request` flags alone
+had not established this behavior under the managed automatic reviewer.
+
+The worker ran a coordinator-owned assertion script in its default sandbox:
+
+```json
+{"allowedWrite":"passed","protectedWrite":"EPERM","pilotContent":"passed"}
+```
+
+The script wrote/read a scoped evidence file, attempted a harmless exclusive
+create of `.git/herdr-closeout-probe`, required `EPERM` or `EACCES`, and checked
+`pilot-result.txt` for the exact required bytes. It exited 0. No escalation or
+outside-sandbox retry occurred. The launch prompt appeared once; no assignment
+was resent. The coordinator collected the report/screen, rechecked the exact
+worker PID/start time/executable and core identity, killed only t1c, confirmed
+its finished state, and removed it.
+
+With the writer stopped, the coordinator independently reran the probe using
+`codex sandbox -P :workspace --include-managed-config`, retaining the inner
+sandbox while executing outside the outer sandbox (which cannot initialize a
+nested Seatbelt sandbox). The independent probe exited 0 with the same output.
+Tracked diff and nonignored-untracked checks verified write scope; the protected
+probe file was absent. Before/after `observeRevision` snapshots matched:
+
+- Commit: `c5f1a96508ad1e5eefb2062a5b7169c57549e6af`.
+- Raw-input digest: `sha256:a4e0cb361d05225b1e836dc334d3b14c87fae27ec14964bac17a589e5ec25efd`.
+- New task: `hc-closeout-20261031`; sequence 2 accepted via `recordAcceptance`.
+
+Local evidence lives in
+`/private/tmp/herdr-zstack-pilot-20261031/.herdr-tasks/closeout/`:
+`launch-attempt.json`, `mcp-check.json`, `report.md`, `collected-screen.txt`,
+`prestop-get.json`, `finished-get.json`, `coordinator-check.json`, `record.json`
+and `handoff.md`. These temporary artifacts are not portable dependencies;
+the observed outcomes are recorded here. This is a bounded filesystem and
+approval-policy proof, not exhaustive adversarial sandbox certification.
+
+The native checker passed again. A fresh disposable app home, installed by the
+repository installer, rendered the new record with its actual digest and
+artifacts after the asynchronous read. The inspected screenshot showed
+`RECEIPT SNAPSHOT: accepted` alongside current `Acceptance: unverified`, as
+required without independent Git observation in the panel. The disposable app
+exited normally and its terminal t1d was removed. The personal app remained on
+`personal-task-evidence` with t16 selected and no errors. Earlier live selection,
+refresh, scrolling and layout-switch checks remain the interaction evidence;
+this pass verified the refreshed receipt rendering.
+
+| Issue | Acceptance evidence and remaining publication gate |
+|---|---|
+| #1 | Operation matrix, capability preflight, explicit session/authority rules and installed-version baseline in the execution contract. |
+| #2 | Schema fixtures, atomic store tests, revision/identity checks and five hidden-input regressions; refreshed raw-input receipt above. |
+| #3 | Real single-worker completion and owned cleanup, fresh permission probe above, and no-duplicate-dispatch fixture coverage. |
+| #4 | App closure with surviving binding, core/worker loss, stale/reused occupant, unavailable remote, stale revision and scoped pause are simulated in lifecycle tests. No host-restart claim; simulations are allowed by the issue. Real pilot supplies process accounting and final safe handoff. |
+| #5 | Native checker, prior live selection/refresh/scroll/layout checks and refreshed real receipt rendering; the panel remains read-only and labels unavailable ownership evidence. |
+| #6 | Disposable installer tests include update/rollback/recovery hardlink protection; all 37 Node tests pass locally. Remote clean-checkout CI must pass on the published PR before closeout. |
