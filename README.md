@@ -9,6 +9,7 @@ Herdr-specific workflows and native UI for zstack. This repository owns integrat
 - [Task records and revision receipts](docs/task-record.md): shared schema, coordinator writer, local revision observation, and fail-closed acceptance checks.
 - [Installation](docs/installation.md): reproducible namespaced mod installation, personal layout recipe, and CI checks.
 - [hc workflow companion](skills/hc-workflow/SKILL.md): the hc-native port of zstack's `herdr-workflow`, with [operations](skills/hc-workflow/references/operations.md) for a bounded roster of 1–3 task-owned workers and a coordinator-owned [run index](docs/task-record.md#run-index-for-a-roster). It ships as the `herdr-zstack:hc-workflow` plugin skill; see [installation](docs/installation.md#hc-companion-skills).
+- [Swarm addendum](skills/swarm/SKILL.md): hc fan-out, coverage drain and race cancellation applied alongside zstack's swarm, with per-writer worktrees and one consolidated report.
 - [Role templates](templates/): `z-agent` and `comment-sicko` as hc templates for Claude Code and Codex, installed with `--target templates`; see [installation](docs/installation.md#hc-role-templates).
 - [Worker lifecycle](docs/worker-lifecycle.md): scoped single-worker execution and pause/pickup reconciliation, with [local pilot evidence](docs/validation.md#issue-3-single-worker-hc-pilot--2026-10-31) and [recovery proof limits](docs/validation.md#issue-4-pause-and-pickup-reconciliation--2026-10-31).
 
