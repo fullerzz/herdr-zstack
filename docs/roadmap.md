@@ -1,6 +1,6 @@
 # Roadmap: zstack on native Herdr
 
-Status: M0 inventory and decisions complete 2026-10-31. M1 preflight is implemented. M2's companion and two-worker pilot are implemented ([validation](validation.md#issue-11-hc-workflow-companion-and-two-worker-roster-pilot--2026-10-31)). M1 routing and M3–M8 remain planned. Nothing here authorizes dispatch, tracker writes, commits to either repository, or personal configuration changes.
+Status: M0 inventory and decisions complete 2026-10-31. M1 preflight and upstream routing are implemented; fresh interactive host routing remains unverified (see M1 below). M2's companion and two-worker pilot are implemented ([validation](validation.md#issue-11-hc-workflow-companion-and-two-worker-roster-pilot--2026-10-31)). M3–M8 remain planned. Nothing here authorizes dispatch, tracker writes, commits to either repository, or personal configuration changes.
 
 ## Goal
 
@@ -12,7 +12,9 @@ Issues #1–#6 proved that path for one worker. This roadmap ports the rest of z
 
 Observed on 2026-10-31 with zstack 0.22.0 (local checkout and `fullerzz/agent-skills` main agree), hc 0.1.15, herdr-app 0.1.10, and legacy `herdr` 0.9.5 still installed.
 
-| Area | Current state | Gap |
+This table preserves the initial snapshot before M1 and M2 implementation. The milestone sections below track subsequent delivery and validation limits.
+
+| Area | Initial state | Gap |
 |---|---|---|
 | zstack `herdr-workflow` + `references/operations.md` | Written for the legacy `herdr pane` / `herdr agent` API | Incompatible with hc, as the [execution contract](execution-contract.md) records. |
 | Environment gate | zstack requires `HERDR_ENV=1` | Coordinators in hc terminals get `HC_TERMINAL_ID` (this session: `t16`), but `HERDR_ENV` is unset. The shared gate refuses a valid native session. |
@@ -48,10 +50,10 @@ M0 records source coverage in the inventory. Each runtime milestone ends with a 
 
 ### M1 — Native detection, preflight and selection routing
 
-- Replace the `HERDR_ENV=1` gate with a native check: `HC_TERMINAL_ID` is set, `hc get "$HC_TERMINAL_ID"` resolves, and `hc server status` answers. `HERDR_ENV` may be diagnostic context only; it never enables the legacy execution path (D6).
-- Add read-only `scripts/preflight.mjs`. It emits the execution contract's supported / unavailable / untested matrix as JSON: versions, core ID, caller address, parent topology, templates, machines, and installed zstack version and path. It never launches anything. Implemented in #9: see [validation](validation.md#issue-9-native-detection-and-preflight--2026-10-31). The shared zstack gate still needs the cross-repo change below.
-- Route selection: the zstack hook keeps the single set of controls. When Herdr is selected, it resolves the installed herdr-zstack companion instead of its legacy skill. A missing companion is reported as a capability gap. This needs a cross-repo change in agent-skills.
-- Proof: preflight in this terminal reports a supported native session. Preflight outside hc reports unavailable. In a fresh Claude Code and Codex session, the hook points at the herdr-zstack companion after selection.
+- The companion owns the native check: `HC_TERMINAL_ID` is set, the caller resolves, and the core answers. `HERDR_ENV` is diagnostic context only; it never enables the legacy execution path (D6).
+- Read-only `scripts/preflight.mjs` emits the execution contract's supported / unavailable / untested matrix as JSON: versions, core ID, caller address, parent topology, templates, machines, and installed zstack version and path. It never launches anything. Implemented in #9: see [validation](validation.md#issue-9-native-detection-and-preflight--2026-10-31).
+- Selection routing shipped in zstack 0.23.0 through [agent-skills#73](https://github.com/fullerzz/agent-skills/issues/73) and [PR #75](https://github.com/fullerzz/agent-skills/pull/75). The zstack hook keeps the single set of controls. When Herdr is selected, it resolves the installed herdr-zstack companion instead of its legacy skill and delegates native preflight to the companion. A missing or ambiguous companion is reported as a capability gap, with no legacy fallback.
+- Proof: the local [preflight checks](validation.md#issue-9-native-detection-and-preflight--2026-10-31) reported a supported native session inside hc and unavailable outside hc. Upstream [routing validation](https://github.com/fullerzz/agent-skills/blob/main/docs/validation.md#native-hc-companion-routing) records isolated hook fixtures for Codex and Claude Code, not live agent sessions. Fresh interactive sessions selecting the installed companion remain unverified.
 
 ### M2 — `hc-workflow` companion (the port of `herdr-workflow`)
 
@@ -117,7 +119,7 @@ Accepted 2026-10-31 for issue #8. These decisions select the implementation cont
 | ID | Decision | Rationale and implementation boundary |
 |---|---|---|
 | D1 | Use an overlay, not a full fork. | Matches [AGENTS.md](../AGENTS.md). Shared principles, workflows, and acceptance stay in zstack; this repository owns hc deltas and Herdr-specific replacements. This avoids maintaining a second 57-skill library. M2/M4/M8. |
-| D2 | zstack owns the single session hook and selection controls. | Two hooks issuing controls would conflict. The existing hook's Herdr branch resolves the installed companion; a missing companion is a capability gap. herdr-zstack adds no activation hook or parallel preference store. M1's upstream routing issue implements this. |
+| D2 | zstack owns the single session hook and selection controls. | Two hooks issuing controls would conflict. The existing hook's Herdr branch resolves the installed companion; a missing companion is a capability gap. herdr-zstack adds no activation hook or parallel preference store. Implemented by M1's upstream routing change in zstack 0.23.0. |
 | D3 | Other-provider seats use interactive hc terminals when Herdr is selected. | The inspected `hc 0.1.15 --skill` requires interactive agents, never one-shot print mode. Keep `codex exec` and `claude -p` on the native path. M4.2 must prove equivalent invocation-only sandbox/tool/MCP restrictions, report collection, and actual family identity before counting coverage; missing capabilities stay gaps. |
 | D4 | Keep schema 1 per worker task; add a coordinator-owned `.herdr-tasks/<run-id>/run.json` listing member task IDs. | Existing records and fixtures remain valid. Each worker keeps its own binding, revision, and receipt; the index groups work without granting aggregate acceptance or introducing shared worker writes. M2 defines and validates the index before roster consumers use it; supporting processes remain separately identified. |
 | D5 | Templates inherit each CLI's defaults unless an override is explicitly requested. | Independent CLI sessions do not inherit parent model settings. At install time accept explicit model and effort as separate supported settings, verify the selected CLI's syntax, and preserve unrelated configuration. No baked-in model IDs, inferred family diversity, or effort-suffixed IDs. M3 implements this. |
