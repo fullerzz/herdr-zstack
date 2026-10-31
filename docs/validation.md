@@ -464,3 +464,42 @@ The checks used temporary `CODEX_HOME` and `CLAUDE_CONFIG_DIR` directories, whic
 were removed afterward. No personal source registration was changed. This proves
 fresh GitHub installation and update commands against the current revision;
 upgrading to a newer plugin release and live skill discovery were not exercised.
+
+## Issue 12: zstack roles as hc templates — 2026-10-31
+
+`templates/` adds four role templates: `z-agent-claude`, `z-agent-codex`, `comment-sicko-claude` and `comment-sicko-codex`. `scripts/install.mjs` gains `--target templates`, with its own ownership file, and explicit model and effort overrides. Installed versions: hc and core 0.1.16, herdr-app 0.1.11, Claude Code 2.1.316, Codex 0.166.0 and Node 24.22.2. The CLI flags were checked against each CLI's `--help`.
+
+### Isolated live run
+
+Everything ran in an isolated core. It used `HC_SESSION=hzprobe` with a scratch `XDG_CONFIG_HOME`, so templates were read from a scratch `herdr-core/templates/`. Its state and socket lived in a short `/private/tmp` directory, because the scratchpad path exceeds the 103-byte socket limit. The user's core, `~/.config/herdr-core` and personal templates were not touched. A `cat` terminal (`coord`) stood in for the coordinator, so each `hc send` landed as text that `hc read coord` could show.
+
+- **Parsing.** A probe template showed that hc splits `command` like a shell, so quoted arguments such as `'Bash(hc send:*)'` stay whole. It also showed that hc sends the body and task as the first message once the agent is ready, not as argv.
+- **Install and list.** The installer preview listed four writes. `--apply` wrote them, and `hc templates` listed all four with the expected commands. `--claude-effort turbo` was refused with exit 1.
+- **`comment-sicko-claude`.** It reviewed the comments in `scripts/install.mjs` and launched as `claude-code` with `first_message.sent: true`. It read the given z-mode path and wrote no files. It left its report on screen and sent `sicko-claude done: report on screen`, which arrived at `coord`.
+- **`comment-sicko-codex` with `--sandbox read-only`.** The review completed without writes. But `hc send` failed with `cannot start core: Operation not permitted`, so no report arrived. The template was changed to `workspace-write` and updated through the installer (one write). A rerun reviewing `templates/comment-sicko-codex.md` sent `sicko-codex2 done: report on screen`, which arrived.
+- **`z-agent-codex`.** A read-only task (`git rev-parse HEAD`) wrote only its assigned report outside the checkout and sent `zagent-codex done: <report path>`. The report gave `b843dbba1a348313daae9cbafd4fbd12ba870c54`.
+- **Checkout.** `git status --short` was identical before and after the runs. The coordinator applied the reviewers' comment findings to the new installer code afterwards.
+- **Uninstall.** An unowned `personal.md` template was added, and `hc templates` listed five templates. `remove --apply` removed four. `hc templates` then listed only `personal`, whose SHA-256 was unchanged. After the probe file was deleted, the list was empty.
+- **Cleanup.** `hc ls --all --label run=sicko-pilot` listed exactly the coordinator and three live workers. These and the parsing probe were killed and removed, the listing was empty, and the isolated core was stopped.
+
+Screens, launch responses and the template listing are under this session's scratchpad (`hcprobe/`). They are temporary local evidence, not portable dependencies.
+
+### Tests
+
+`scripts/install.test.mjs` adds 5 tests, all in disposable homes:
+
+- Each shipped template has a name that matches its file, a description, a per-CLI command with no baked-in model or effort, the z-mode read instruction, the no-delegation rule and the report route.
+- Templates install beside unowned templates and `config.toml`. Removal leaves exactly the prior directory listing, and rollback restores the templates.
+- Collisions, edited templates and mod entries in the templates state all abort before any write.
+- Overrides render per CLI and roll back. Invalid efforts, unsafe models, unknown CLIs, and overrides on remove or on the mods target are refused.
+- Malformed sources are refused: an empty source, a name that does not match its file, a non-Claude/Codex command and an unknown target.
+
+All 79 Node tests passed. `git diff --check` passed. No mod code changed, so `herdr-app check` and live UI inspection were not rerun.
+
+### Limits
+
+- Neither `comment-sicko` variant is sandbox-read-only. Claude's Bash and Codex's `workspace-write` can both write; the role and the coordinator's checkout check enforce read-only behavior.
+- The Claude worker started in the user's default permission mode (here, auto mode). Its tool behavior depends on personal settings that the template does not pin.
+- `z-agent-claude` was not run live. Model and effort overrides have test coverage only.
+- `hc send` returned `{"started":null,"status":null,"turn":0}` to a `cat` target, so delivery was confirmed by reading `coord`, not by the API response.
+- Installation into the real `~/.config/herdr-core` was not performed.

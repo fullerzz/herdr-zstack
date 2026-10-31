@@ -50,6 +50,53 @@ a killed process, inspect ownership, files, the lock and any
 temporary file for recovery. Remove a stale lock only after confirming its process
 has stopped; review any temporary state before moving it aside.
 
+## hc role templates
+
+`templates/` ships zstack's two roles as hc templates, one per CLI:
+
+| Template | Command |
+|---|---|
+| `z-agent-claude` | `claude --allowedTools 'Bash(hc send:*)'` |
+| `z-agent-codex` | `codex --no-daemon --sandbox workspace-write --ask-for-approval never` |
+| `comment-sicko-claude` | `claude --disallowedTools Write,Edit,NotebookEdit --allowedTools 'Bash(hc send:*)'` |
+| `comment-sicko-codex` | `codex --no-daemon --sandbox workspace-write --ask-for-approval never` |
+
+Each body carries the role, the instruction to read z-mode's `SKILL.md` first,
+the no-delegation rule and the report route. The task given to `hc run` must supply
+the absolute z-mode path, the coordinator's literal address, the task ID and, for
+`z-agent`, the report path. `comment-sicko` writes no file: it leaves its report on
+screen for `hc read` and sends one status line.
+
+`comment-sicko-codex` uses `workspace-write` because Codex 0.166.0's `read-only`
+sandbox blocks `hc send` (`cannot start core: Operation not permitted`). Neither
+`comment-sicko` variant enforces read-only behavior with a sandbox; the role
+forbids writes and the coordinator checks the checkout afterwards.
+
+Install them into the herdr-core configuration directory, normally
+`$HOME/.config/herdr-core`, with `--target templates`. The same preview, apply,
+ownership, collision-refusal and rollback rules apply as for mods:
+
+```sh
+node scripts/install.mjs install --target templates --home "$HOME/.config/herdr-core"
+node scripts/install.mjs install --target templates --home "$HOME/.config/herdr-core" --apply
+hc templates
+node scripts/install.mjs remove --target templates --home "$HOME/.config/herdr-core" --apply
+```
+
+Templates keep each CLI's default model and effort (roadmap D5). To override one,
+pass it explicitly at install or update time:
+`--claude-model`, `--claude-effort` (`low`, `medium`, `high`, `xhigh`, `max`),
+`--codex-model` and `--codex-effort`. They render as `--model`/`--effort` for
+Claude and `-m`/`-c model_reasoning_effort=` for Codex. Codex effort values are
+checked only for shape. Pass the same overrides again on every update; an update
+without them restores the defaults.
+
+Ownership lives in `.herdr-zstack-templates.json` beside `templates/`, separate
+from the mod state, so rolling back one target never reverts the other. Only
+`templates/<name>.md` files this installer wrote are owned. Personal templates and
+`config.toml` are never touched, and a personal template with a shipped name aborts
+the install.
+
 ## hc companion skills
 
 The repository root is also a `herdr-zstack` plugin. Its manifests are

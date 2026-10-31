@@ -1,6 +1,6 @@
 # Roadmap: zstack on native Herdr
 
-Status: M0 inventory and decisions complete 2026-10-31. M1 preflight and upstream routing are implemented; fresh interactive host routing remains unverified (see M1 below). M2's companion and two-worker pilot are implemented ([validation](validation.md#issue-11-hc-workflow-companion-and-two-worker-roster-pilot--2026-10-31)). M3–M8 remain planned. Nothing here authorizes dispatch, tracker writes, commits to either repository, or personal configuration changes.
+Status: M0 inventory and decisions complete 2026-10-31. M1 preflight and upstream routing are implemented; fresh interactive host routing remains unverified (see M1 below). M2's companion and two-worker pilot are implemented ([validation](validation.md#issue-11-hc-workflow-companion-and-two-worker-roster-pilot--2026-10-31)). M3's role templates are implemented ([validation](validation.md#issue-12-zstack-roles-as-hc-templates--2026-10-31)). M4–M8 remain planned. Nothing here authorizes dispatch, tracker writes, commits to either repository, or personal configuration changes.
 
 ## Goal
 
@@ -67,12 +67,12 @@ M0 records source coverage in the inventory. Each runtime milestone ends with a 
 - Extend records for a roster (D4) without breaking schema 1 fixtures.
 - Proof: a live pilot with two disjoint-scope workers. Both reports collected through hc notes. Coordinator acceptance is bound to one revision snapshot. Cleanup touches only the two terminals. Implemented in #11: see [validation](validation.md#issue-11-hc-workflow-companion-and-two-worker-roster-pilot--2026-10-31).
 
-### M3 — zstack roles as hc templates
+### M3 — zstack roles as hc templates (implemented)
 
 - Port `z-agent` and `comment-sicko` to `templates/<name>.md` for `~/.config/herdr-core/templates/`. Frontmatter carries `name`, `description` and `command`. The body carries the role, the z-mode entrypoint read instruction, the report route and the no-delegation rule.
-- Ship per-CLI command variants (Claude, and Codex with `--no-daemon`). Model selection follows D5.
+- Ship per-CLI command variants (Claude, and Codex with `--no-daemon`). Model selection follows D5. Both Codex variants use `workspace-write`, because Codex's `read-only` sandbox blocks `hc send`.
 - Extend `scripts/install.mjs` with a templates target. Keep its existing preview/apply, ownership, collision-refusal and rollback behavior.
-- Proof: `hc templates` lists them. A read-only `comment-sicko` template run produces a report through `hc send`. Uninstall restores an empty templates directory.
+- Proof: `hc templates` lists them. A read-only `comment-sicko` template run produces a report through `hc send`. Uninstall restores an empty templates directory. Implemented in #12: see [validation](validation.md#issue-12-zstack-roles-as-hc-templates--2026-10-31).
 
 ### M4 — hc deltas for delegating skills
 

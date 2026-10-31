@@ -4,11 +4,27 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
-const stateName = '.herdr-zstack-install.json';
 const prefix = 'mods/zstack-task-evidence/';
 const tabsPrefix = 'mods/zstack-task-evidence-tabs/';
 const hash = data => createHash('sha256').update(data).digest('hex');
-const validPath = name => [prefix, tabsPrefix].some(p => name.startsWith(p) && /^[a-zA-Z0-9_-]+\.(js|json)$/.test(name.slice(p.length)));
+// Separate state per target: rolling back one target never reverts the other.
+const targets = {
+  mods: {
+    stateName: '.herdr-zstack-install.json',
+    lockName: '.herdr-zstack-install.lock',
+    validPath: name => [prefix, tabsPrefix].some(p => name.startsWith(p) && /^[a-zA-Z0-9_-]+\.(js|json)$/.test(name.slice(p.length))),
+  },
+  templates: {
+    stateName: '.herdr-zstack-templates.json',
+    lockName: '.herdr-zstack-templates.lock',
+    validPath: name => /^templates\/[a-z0-9][a-z0-9-]*\.md$/.test(name),
+  },
+};
+// Flag syntax from Claude Code 2.1.316 and Codex 0.166.0 help. Codex help lists no effort values, so only their shape is checked.
+const overrideFlags = {
+  claude: { model: value => `--model ${value}`, effort: value => `--effort ${value}`, efforts: /^(low|medium|high|xhigh|max)$/ },
+  codex: { model: value => `-m ${value}`, effort: value => `-c model_reasoning_effort=${value}`, efforts: /^[a-z]+$/ },
+};
 
 function replaceFile(target, data) {
   fs.mkdirSync(path.dirname(target), { recursive: true });
@@ -38,36 +54,83 @@ function safePath(home, name = '') {
   return target;
 }
 
-export function run({ home, action = 'install', apply = false, source = path.join(root, 'mods/task-evidence'), tabsSource = path.join(root, 'mods/task-evidence-tabs') }) {
-  if (!home || !path.isAbsolute(home)) throw new Error('--home must be an explicit absolute app configuration directory');
+// Roadmap D5: templates keep each CLI's defaults; flags are appended only for explicitly requested settings.
+function renderTemplate(text, file, overrides) {
+  const frontmatter = /^---\n([\s\S]*?)\n---\n/.exec(text)?.[1];
+  const field = key => frontmatter?.split('\n').find(line => line.startsWith(`${key}: `))?.slice(key.length + 2);
+  if (field('name') !== path.basename(file, '.md') || !field('description')) throw new Error(`Template name must match its file and have a description: ${file}`);
+  const command = field('command');
+  const flags = overrideFlags[command?.split(' ')[0]];
+  if (!flags) throw new Error(`Template command must start with claude or codex: ${file}`);
+  const { model, effort } = overrides[command.split(' ')[0]] ?? {};
+  const extra = [model && flags.model(model), effort && flags.effort(effort)].filter(Boolean);
+  return Buffer.from(extra.length ? text.replace(`\ncommand: ${command}\n`, `\ncommand: ${[command, ...extra].join(' ')}\n`) : text);
+}
+
+function validateOverrides(overrides, target, action) {
+  for (const [cli, settings] of Object.entries(overrides)) {
+    if (!overrideFlags[cli] || !settings || typeof settings !== 'object') throw new Error(`Unknown template CLI: ${cli}`);
+    for (const [key, value] of Object.entries(settings)) {
+      if (value === undefined) continue;
+      if (target !== 'templates' || !['install', 'update'].includes(action)) throw new Error('Model and effort overrides apply only to installing or updating templates');
+      if (key === 'model' && !/^[A-Za-z0-9][A-Za-z0-9._:/@-]*$/.test(value)) throw new Error(`Invalid ${cli} model: ${value}`);
+      else if (key === 'effort' && !overrideFlags[cli].efforts.test(value)) throw new Error(`Invalid ${cli} effort: ${value}`);
+      else if (!['model', 'effort'].includes(key)) throw new Error(`Unknown ${cli} setting: ${key}`);
+    }
+  }
+}
+
+export function run({ home, action = 'install', apply = false, target = 'mods', source = path.join(root, 'mods/task-evidence'), tabsSource = path.join(root, 'mods/task-evidence-tabs'), templatesSource = path.join(root, 'templates'), overrides = {} }) {
+  if (!home || !path.isAbsolute(home)) throw new Error('--home must be an explicit absolute configuration directory');
   if (!['install', 'update', 'remove', 'rollback'].includes(action)) throw new Error('Expected install, update, remove, or rollback');
+  if (!Object.hasOwn(targets, target)) throw new Error('Expected target mods or templates');
+  validateOverrides(overrides, target, action);
   safePath(home);
-  if (!apply) return transact({ home, action, apply, source, tabsSource });
+  const options = { home, action, apply, target: targets[target], sources: target === 'mods' ? { source, tabsSource } : { templatesSource, overrides } };
+  if (!apply) return transact(options);
   fs.mkdirSync(home, { recursive: true });
-  const lockPath = safePath(home, '.herdr-zstack-install.lock');
+  const lockPath = safePath(home, targets[target].lockName);
   const lock = fs.openSync(lockPath, 'wx');
-  try { return transact({ home, action, apply, source, tabsSource }); }
+  try { return transact(options); }
   finally { fs.closeSync(lock); fs.unlinkSync(lockPath); }
 }
 
-function transact({ home, action, apply, source, tabsSource }) {
+function modFiles({ source, tabsSource }, validPath) {
+  const wanted = {};
+  for (const [directory, destination] of [[source, prefix], ...(tabsSource ? [[tabsSource, tabsPrefix]] : [])]) {
+    for (const entry of fs.readdirSync(directory, { withFileTypes: true })) {
+      if (!(entry.name.endsWith('.js') || entry.name === 'mod.json')) continue;
+      const name = destination + entry.name;
+      if (!validPath(name) || !entry.isFile() || entry.isSymbolicLink()) throw new Error(`Invalid runtime file: ${entry.name}`);
+      wanted[name] = fs.readFileSync(path.join(directory, entry.name));
+    }
+    if (!wanted[destination + 'main.js'] || !wanted[destination + 'mod.json']) throw new Error('Incomplete mod source');
+  }
+  return wanted;
+}
+
+function templateFiles({ templatesSource, overrides }, validPath) {
+  const wanted = {};
+  for (const entry of fs.readdirSync(templatesSource, { withFileTypes: true })) {
+    if (!entry.name.endsWith('.md')) continue;
+    const name = 'templates/' + entry.name;
+    if (!validPath(name) || !entry.isFile() || entry.isSymbolicLink()) throw new Error(`Invalid template file: ${entry.name}`);
+    wanted[name] = renderTemplate(fs.readFileSync(path.join(templatesSource, entry.name), 'utf8'), entry.name, overrides);
+  }
+  if (!Object.keys(wanted).length) throw new Error('No templates to install');
+  return wanted;
+}
+
+function transact({ home, action, apply, target: { stateName, validPath }, sources }) {
   const statePath = safePath(home, stateName);
   const state = fs.existsSync(statePath) ? JSON.parse(fs.readFileSync(statePath, 'utf8')) : { version: 1, owned: {}, previous: null };
   if (state.version !== 1 || !state.owned || typeof state.owned !== 'object' || Array.isArray(state.owned)) throw new Error('Invalid installation state');
   for (const [name, digest] of Object.entries(state.owned)) {
     if (!validPath(name) || typeof digest !== 'string' || !/^[a-f0-9]{64}$/.test(digest)) throw new Error('Invalid ownership entry');
   }
-  const wanted = {};
+  let wanted = {};
   if (action === 'install' || action === 'update') {
-    for (const [directory, destination] of [[source, prefix], ...(tabsSource ? [[tabsSource, tabsPrefix]] : [])]) {
-      for (const entry of fs.readdirSync(directory, { withFileTypes: true })) {
-        if (!(entry.name.endsWith('.js') || entry.name === 'mod.json')) continue;
-        const name = destination + entry.name;
-        if (!validPath(name) || !entry.isFile() || entry.isSymbolicLink()) throw new Error(`Invalid runtime file: ${entry.name}`);
-        wanted[name] = fs.readFileSync(path.join(directory, entry.name));
-      }
-      if (!wanted[destination + 'main.js'] || !wanted[destination + 'mod.json']) throw new Error('Incomplete mod source');
-    }
+    wanted = sources.templatesSource ? templateFiles(sources, validPath) : modFiles(sources, validPath);
   } else if (action === 'rollback') {
     if (!state.previous || !state.previous.files || !state.previous.owned) throw new Error('No transaction to roll back');
     for (const [name, data] of Object.entries(state.previous.files)) {
@@ -115,13 +178,22 @@ if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.me
   try {
     const args = process.argv.slice(2);
     const action = args.shift();
-    let home, apply = false;
+    let home, target, apply = false;
+    const overrides = { claude: {}, codex: {} };
+    const value = flag => {
+      const next = args.shift();
+      if (next === undefined || next.startsWith('--')) throw new Error(`${flag} needs a value`);
+      return next;
+    };
     while (args.length) {
       const flag = args.shift();
-      if (flag === '--home') home = args.shift();
+      const setting = /^--(claude|codex)-(model|effort)$/.exec(flag);
+      if (flag === '--home') home = value(flag);
+      else if (flag === '--target') target = value(flag);
       else if (flag === '--apply') apply = true;
+      else if (setting) overrides[setting[1]][setting[2]] = value(flag);
       else throw new Error(`Unknown argument: ${flag}`);
     }
-    console.log(JSON.stringify({ apply, changes: run({ home, action, apply }) }, null, 2));
+    console.log(JSON.stringify({ apply, changes: run({ home, action, apply, target, overrides }) }, null, 2));
   } catch (error) { console.error(error.message); process.exitCode = 1; }
 }
