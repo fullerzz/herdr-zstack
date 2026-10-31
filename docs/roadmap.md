@@ -1,6 +1,6 @@
 # Roadmap: zstack on native Herdr
 
-Status: M0 inventory and decisions complete 2026-10-31; M1–M8 remain planned. Nothing here authorizes dispatch, tracker writes, commits to either repository, or personal configuration changes.
+Status: M0 inventory and decisions complete 2026-10-31. M1 preflight is implemented. M2's companion and two-worker pilot are implemented ([validation](validation.md#issue-11-hc-workflow-companion-and-two-worker-roster-pilot--2026-10-31)). M1 routing and M3–M8 remain planned. Nothing here authorizes dispatch, tracker writes, commits to either repository, or personal configuration changes.
 
 ## Goal
 
@@ -63,7 +63,7 @@ M0 records source coverage in the inventory. Each runtime milestone ends with a 
   - Use `herdr-app` only for requested presentation.
 - Generalize the single-worker procedure into a bounded roster of 2–3 workers with exclusive scopes or worktrees. `single-worker` stays the N=1 case.
 - Extend records for a roster (D4) without breaking schema 1 fixtures.
-- Proof: a live pilot with two disjoint-scope workers. Both reports collected through hc notes. Coordinator acceptance is bound to one revision snapshot. Cleanup touches only the two terminals.
+- Proof: a live pilot with two disjoint-scope workers. Both reports collected through hc notes. Coordinator acceptance is bound to one revision snapshot. Cleanup touches only the two terminals. Implemented in #11: see [validation](validation.md#issue-11-hc-workflow-companion-and-two-worker-roster-pilot--2026-10-31).
 
 ### M3 — zstack roles as hc templates
 

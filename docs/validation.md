@@ -278,3 +278,157 @@ mod code changed.
 - Template, machine and remote rows prove listing only.
 - Hook routing to a herdr-zstack companion (rest of M1) needs the agent-skills
   change and is not part of this slice.
+
+## Issue 11: hc-workflow companion and two-worker roster pilot — 2026-10-31
+
+Added the [hc-workflow companion](../skills/hc-workflow/SKILL.md), its
+[operations reference](../skills/hc-workflow/references/operations.md), the
+run index (`workflows/roster.mjs`, `writeRun`), and `herdr-zstack` plugin
+manifests. `claude plugin validate .` passed. The plugin was not installed into
+any personal configuration.
+
+### Live pilot
+
+Coordinator: this Claude Code session in `t16`. Workers were authorized by the
+user for this pilot. Versions matched the baseline: hc and core 0.1.15, Codex
+0.166.0 at its default model (`gpt-6.1-sol`, high effort, per D5).
+
+- **Run.** Scratch checkout `/private/tmp/herdr-zstack-roster-20261031` at base
+  commit `1645b013a2315d567302b6f5f62b5cdb4ce94fdf`. Run index
+  `.herdr-tasks/roster-pilot/run.json`. Members `roster-a` (writes `a.txt` and
+  its report) and `roster-b` (writes `b.txt` and its report). `validateRun`
+  accepted the disjoint scopes. The coordinator wrote both records and the index
+  before launch.
+- **Launch.** Each worker got one `hc run --bg --json` with run, task and role
+  labels. The task was in the argv. Codex ran directly with `--no-daemon`,
+  `--sandbox workspace-write --ask-for-approval never`, apps and plugins
+  disabled, and all eleven configured MCP servers disabled. Each member's handoff
+  recorded `launchAttempted` before its launch. hc returned `t1m` and `t1n`, both
+  `agent: codex` and `parent: t16`.
+- **Delivery.** The launch response had **no `first_message` field** for a
+  direct argv task, so delivery was unknown until the screens were read. Both
+  workers stopped at Codex's folder-trust dialog. The invocation-only
+  `projects."<path>".trust_level` override did not suppress it. With the user's
+  specific authorization, the coordinator chose "Trust and continue" in each
+  terminal. That persisted a trust entry for this one scratch path in
+  `~/.codex/config.toml`. A second dialog asked to trust 8 new hooks. The
+  coordinator chose "Continue without trusting (hooks won't run)". Each screen
+  then showed the launch prompt exactly once. No task was resent.
+- **Reports.** Both reports arrived as hc notes:
+  `<hc from="t1n roster-pilot-b">roster-b done: …</hc>`, then the same from
+  `t1m roster-pilot-a`. Each `hc wait --children any` returned
+  `reason: message` with the matching `from`. Then `--children all` returned
+  both children `done`. **`hc send` worked from inside Codex's workspace-write
+  sandbox** (the screens show exit 0). The coordinator read both report files
+  and saved both screens. Each worker also read its Codex memory index before
+  reading the brief. That read is outside the brief's intent but wrote nothing,
+  and both reports disclosed it.
+- **Binding and freeze.** Each record bound the core ID plus the core process
+  start time, the terminal address, and the occupant PID with its start time and
+  executable. Before each kill, the coordinator rechecked the PID start time and
+  executable. After the kills, `hc get` showed both `finished`
+  (`reason: killed`).
+- **Acceptance.** `observeRevision` ran before and after the coordinator checks:
+  exact content of both files, HEAD unchanged, and untracked files exactly
+  `a.txt` and `b.txt`. Both snapshots matched digest
+  `sha256:f480775aba2a0a466f7071fe90eed8ae5fcb1ffd0012034c288aff95491346de`.
+  `recordMemberAcceptance` then wrote both receipts (sequence 3) against that one
+  snapshot. The coordinator also checked that neither worker had changed its
+  record or the index. Both records reached sequence 4, `completed`, and
+  `acceptanceStatus` reports `accepted` against a fresh observation.
+- **Cleanup.** `hc ls --all --label run=roster-pilot` listed only `t1m` and
+  `t1n`. `hc rm` removed exactly those two. The following listing was empty. No
+  other terminal was touched, and `herdr-app` was not used.
+
+Evidence is under
+`/private/tmp/herdr-zstack-roster-20261031/.herdr-tasks/`: `roster-pilot/`
+holds `run.json`, `coordinator-check.json`, the core process and the cleanup
+listings. Each member directory holds `task.json`, `brief.md`, `handoff.md`,
+`launch-attempt.json`, `launch.json`, `report.md`, `collected-screen.txt`,
+`occupant.txt`, and the running, pre-stop and finished `hc get` output. These
+files are temporary local evidence, not portable dependencies.
+
+### Fixture tests
+
+`workflows/roster.test.mjs` adds 8 tests:
+
+- The run fixture is a valid index, is not a task record, and leaves the schema 1
+  fixtures valid.
+- Rosters are limited to 1–3 members with unique IDs.
+- Members in one checkout need disjoint writes.
+- No member may write a coordinator file.
+- Worktrees may not nest.
+- Malformed input fails.
+- Acceptance waits for every writer in the checkout to finish.
+- No worker or non-coordinator can accept.
+- Index writes are sequence-checked.
+
+All 68 Node tests passed on Node 24.22.2, including the 23 mod tests.
+`herdr-app check mods/task-evidence` and `git diff --check` passed. No mod code
+changed.
+
+### Limits
+
+- The workers ran in one shared checkout. Separate worktrees have fixture
+  coverage only.
+- The roster had two members. Three members, remote members, pause and pickup
+  have fixture coverage only.
+- Codex's trust and hook dialogs need an operator decision for every new path.
+  The invocation-only override did not avoid them.
+- A sandbox does not stop a worker from writing its own record. The coordinator
+  checked that afterward. Enforcement is still by brief and inspection.
+- Without `first_message`, delivery is established by reading the screen, not by
+  an API field.
+- Claude Code installation of the companion was validated by manifest only.
+  Codex installation was not exercised.
+
+## PR 23: interrogation fixes — 2026-10-31
+
+Fixed the five independently reproduced scope and acceptance defects:
+
+- Scope checks now compare resolved absolute targets, including existing symlinks
+  and ancestors of files not yet created. Non-normalized checkout paths fail.
+  Case and Unicode-normalization variants conservatively conflict on every host.
+  Workers cannot reach protected records through aliases or from a checkout
+  containing the coordinator checkout. Dangling symlinks and writes outside the
+  checkout fail validation; disjoint symlink targets remain usable.
+- Acceptance takes the same run-index lock used by `writeRun` and holds it through
+  receipt publication. The complete supplied index must match the persisted
+  index, so neither an older sequence nor a truncated member list can omit a
+  live writer. Concurrent index writes fail with an occupied lock.
+- Reconciled member records must match the run's machine as well as its task,
+  checkout and coordinator.
+- The shared `acceptanceReceipt` checks owner/coordinator equality on the record
+  actually being accepted. A coordinator ownership update between roster
+  reconciliation and receipt creation can no longer bypass the self-acceptance
+  guard. A later update is still rejected by the existing sequence check.
+
+Added five regression tests in `workflows/roster.test.mjs`. All five failed
+against the original code, then passed with the fixes. The concurrency test uses
+an actual FIFO to pause a sibling read, updates the target's owner through
+`writeRecord`, and verifies rejection without a receipt. It also verifies that
+`writeRun` cannot update the locked index during acceptance and that the lock is
+released after rejection. Existing acceptance fixtures now persist their run
+index before use.
+
+Validation on Node 24.22.2: all 73 tests passed, including the 23 Task & Evidence
+tests and unchanged schema 1 fixtures. `git diff --check` passed.
+`herdr-app check mods/task-evidence` passed outside the sandbox. Its initial
+sandboxed attempt emitted macOS GUI-service connection errors and hung; it was
+interrupted before the successful retry. No live UI or worker pilot was rerun,
+no mod code changed, and no personal configuration was changed.
+
+Limits: validation observes local filesystem state; it does not prevent a worker
+from changing symlinks after validation. Revalidate immediately before launch,
+keep targets stable while workers run, and inspect actual edits. Conservative
+case folding also rejects case-only distinctions on case-sensitive filesystems.
+
+### Review follow-up: unique member record targets
+
+The current-head review found that distinct member IDs could resolve to the same
+record through case differences or symlinked evidence directories. Scope
+validation now rejects duplicate resolved member-record paths before a run can be
+persisted. The regression covers both cases and verifies that a rejected update
+leaves the existing index unchanged. It failed before the fix; all 74 Node tests
+pass afterward on Node 24.22.2. `git diff --check` passed. No mod code changed and
+no live worker pilot was rerun for this follow-up.

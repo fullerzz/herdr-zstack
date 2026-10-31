@@ -2,30 +2,50 @@ import { open, readFile, rename, unlink } from 'node:fs/promises';
 import { randomUUID } from 'node:crypto';
 import { validateRecord } from '../mods/task-evidence/task-record.js';
 
-// One coordinator owns the record. The lock rejects concurrent writers; sequence rejects stale updates.
-export async function writeRecord(path, record, { writer, expectedSequence = 0 }) {
-  const errors = validateRecord(record);
-  if (errors.length) throw new Error(errors.join('; '));
-  if (writer !== record.coordinator) throw new Error('only the coordinator may write');
+export async function withFileLock(path, action) {
   const lockPath = `${path}.lock`;
   const lock = await open(lockPath, 'wx', 0o600);
-  const temporary = `${path}.${randomUUID()}.tmp`;
-  try {
-    let previous;
-    try { previous = JSON.parse(await readFile(path, 'utf8')); }
-    catch (error) { if (error.code !== 'ENOENT') throw error; }
-    if (previous !== undefined && validateRecord(previous).length) throw new Error('existing record is malformed');
-    if ((previous?.sequence ?? 0) !== expectedSequence || record.sequence !== expectedSequence + 1) throw new Error('stale sequence');
-    if (previous && ['taskId', 'coordinator', 'machine', 'checkout'].some(key => previous[key] !== record[key])) throw new Error('record identity cannot change');
-    const file = await open(temporary, 'wx', 0o600);
-    try { await file.writeFile(`${JSON.stringify(record, null, 2)}\n`); await file.sync(); }
-    finally { await file.close(); }
-    await rename(temporary, path);
-  } finally {
-    await unlink(temporary).catch(error => { if (error.code !== 'ENOENT') throw error; });
+  try { return await action(); }
+  finally {
     await lock.close();
     await unlink(lockPath);
   }
+}
+
+// One coordinator owns each file. The lock rejects concurrent writers; sequence rejects stale updates.
+async function writeLocked(path, value, { writer, expectedSequence, validate, identity }) {
+  const errors = validate(value);
+  if (errors.length) throw new Error(errors.join('; '));
+  if (writer !== value.coordinator) throw new Error('only the coordinator may write');
+  return withFileLock(path, async () => {
+    const temporary = `${path}.${randomUUID()}.tmp`;
+    try {
+      let previous;
+      try { previous = JSON.parse(await readFile(path, 'utf8')); }
+      catch (error) { if (error.code !== 'ENOENT') throw error; }
+      if (previous !== undefined && validate(previous).length) throw new Error('existing record is malformed');
+      if ((previous?.sequence ?? 0) !== expectedSequence || value.sequence !== expectedSequence + 1) throw new Error('stale sequence');
+      if (previous && identity.some(key => previous[key] !== value[key])) throw new Error('record identity cannot change');
+      const file = await open(temporary, 'wx', 0o600);
+      try { await file.writeFile(`${JSON.stringify(value, null, 2)}\n`); await file.sync(); }
+      finally { await file.close(); }
+      await rename(temporary, path);
+    } finally {
+      await unlink(temporary).catch(error => { if (error.code !== 'ENOENT') throw error; });
+    }
+  });
+}
+
+export async function writeRecord(path, record, { writer, expectedSequence = 0 }) {
+  await writeLocked(path, record, { writer, expectedSequence, validate: validateRecord,
+    identity: ['taskId', 'coordinator', 'machine', 'checkout'] });
+}
+
+// A run index groups member task records; it never holds worker bindings or receipts.
+export async function writeRun(path, run, { writer, expectedSequence = 0 }) {
+  const { validateRun } = await import('../workflows/roster.mjs');
+  await writeLocked(path, run, { writer, expectedSequence, validate: validateRun,
+    identity: ['runId', 'coordinator', 'machine', 'checkout'] });
 }
 
 // Freeze task writers before observing; git does not provide an atomic worktree snapshot.
