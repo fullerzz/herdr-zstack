@@ -23,6 +23,7 @@ export function pausePlan(saved, observed) {
 }
 
 export function acceptanceReceipt(saved, observed, checks) {
+  if (saved.owner === saved.coordinator) throw new Error('a worker cannot accept its own work');
   const reconciled = reconcile(saved, observed);
   if (!['bound', 'finished'].includes(reconciled.state) || reconciled.verification !== 'current') throw new Error('binding or verification revision changed');
   if (!Array.isArray(checks) || !checks.length || checks.some(check => !check.command || check.exitCode !== 0 || !check.evidence)) throw new Error('passing coordinator checks with evidence required');

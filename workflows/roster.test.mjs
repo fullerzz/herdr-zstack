@@ -1,10 +1,11 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdtemp, mkdir, readFile, rm, writeFile } from 'node:fs/promises';
+import { mkdtemp, mkdir, readFile, rm, writeFile, symlink, open } from 'node:fs/promises';
+import { execFileSync } from 'node:child_process';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { validateRun, parseRun, recordMemberAcceptance, recordPath, runPath, MAX_ROSTER } from './roster.mjs';
-import { writeRun } from '../records/task-record-store.mjs';
+import { writeRun, writeRecord } from '../records/task-record-store.mjs';
 import { validateRecord } from '../mods/task-evidence/task-record.js';
 
 const fixture = async name => JSON.parse(await readFile(new URL(`../records/fixtures/${name}.json`, import.meta.url), 'utf8'));
@@ -54,7 +55,7 @@ test('malformed run JSON fails visibly', () => {
   assert.equal(parseRun('{"schemaVersion":2}').run, null);
 });
 
-async function scratchRun() {
+async function scratchRun({ persist = true } = {}) {
   const checkout = await mkdtemp(join(tmpdir(), 'hc-roster-'));
   const run = { schemaVersion: 1, sequence: 1, runId: 'run-1', coordinator: 'parent', machine: 'local', checkout,
     members: [member('a', ['a.txt'], checkout), member('b', ['b.txt'], checkout)] };
@@ -70,6 +71,7 @@ async function scratchRun() {
     await writeFile(recordPath(run.members[i]), JSON.stringify(records[taskId]));
   }
   await mkdir(join(checkout, '.herdr-tasks', 'run-1'), { recursive: true });
+  if (persist) await writeRun(runPath(run), run, { writer: 'parent' });
   return { checkout, run, records, observedByTask };
 }
 
@@ -107,7 +109,7 @@ test('no worker or non-coordinator can accept, and mismatched records are refuse
 });
 
 test('run index writes are coordinator-only and sequence checked', async () => {
-  const { checkout, run } = await scratchRun();
+  const { checkout, run } = await scratchRun({ persist: false });
   try {
     const path = runPath(run);
     await assert.rejects(writeRun(path, run, { writer: 'worker-a' }), /coordinator/);
@@ -117,4 +119,98 @@ test('run index writes are coordinator-only and sequence checked', async () => {
     await assert.rejects(writeRun(path, { ...run, sequence: 2, members: [member('a', ['x'], checkout), member('b', ['x'], checkout)] }, { writer: 'parent', expectedSequence: 1 }), /overlaps/);
     assert.equal(JSON.parse(await readFile(path)).sequence, 1);
   } finally { await rm(checkout, { recursive: true, force: true }); }
+});
+
+test('filesystem aliases cannot grant overlapping or protected writes', async () => {
+  const { checkout, run } = await scratchRun();
+  try {
+    await mkdir(join(checkout, 'src'));
+    await symlink('src', join(checkout, 'editable'));
+    await symlink('.herdr-tasks', join(checkout, 'evidence'));
+    await symlink('.', join(checkout, 'checkout-alias'));
+    await symlink('missing', join(checkout, 'dangling'));
+    const cases = [
+      [member('a', ['shared.txt'], checkout), member('b', ['shared.txt'], `${checkout}/../${checkout.split('/').at(-1)}`)],
+      [member('a', ['shared.txt'], checkout), member('b', ['shared.txt'], join(checkout, 'checkout-alias'))],
+      [member('a', ['src/shared.txt'], checkout), member('b', ['editable/shared.txt'], checkout)],
+      [member('a', ['src/Shared.txt'], checkout), member('b', ['src/shared.txt'], checkout)],
+      [member('a', ['evidence/run-1/run.json'], checkout)],
+      [member('a', ['.HERDR-TASKS/RUN-1/RUN.JSON'], checkout)],
+      [member('a', ['dangling/file.txt'], checkout)],
+    ];
+    for (const members of cases) {
+      const unsafe = { ...run, sequence: 2, members };
+      assert.notDeepEqual(validateRun(unsafe), [], JSON.stringify(members));
+      await assert.rejects(writeRun(runPath(run), unsafe, { writer: 'parent', expectedSequence: 1 }));
+    }
+    assert.equal(JSON.parse(await readFile(runPath(run))).sequence, 1);
+    assert.deepEqual(validateRun({ ...run, members: [member('a', ['src/a.txt'], checkout),
+      member('b', ['editable/b.txt'], checkout)] }), [], 'disjoint symlink targets stay usable');
+  } finally { await rm(checkout, { recursive: true, force: true }); }
+});
+
+test('a containing member checkout cannot grant access to the coordinator index', async () => {
+  const { checkout, run } = await scratchRun();
+  try {
+    const nested = { ...run, checkout: join(checkout, 'coordinator'),
+      members: [member('a', ['coordinator/.herdr-tasks/run-1/run.json'], checkout)] };
+    assert.notDeepEqual(validateRun(nested), []);
+    await mkdir(join(nested.checkout, '.herdr-tasks', 'run-1'), { recursive: true });
+    await assert.rejects(writeRun(runPath(nested), nested, { writer: 'parent' }));
+  } finally { await rm(checkout, { recursive: true, force: true }); }
+});
+
+test('acceptance rejects stale and truncated run indexes while a sibling is live', async () => {
+  const { checkout, run, observedByTask } = await scratchRun({ persist: false });
+  try {
+    const stale = { ...run, members: [run.members[0]] };
+    await writeRun(runPath(run), stale, { writer: 'parent' });
+    const current = { ...run, sequence: 2 };
+    await writeRun(runPath(run), current, { writer: 'parent', expectedSequence: 1 });
+    const live = { ...observedByTask, b: { ...observedByTask.b, state: 'live' } };
+    await assert.rejects(recordMemberAcceptance(stale, 'a', inputs(live)), /stale run/);
+    await assert.rejects(recordMemberAcceptance({ ...stale, sequence: 2 }, 'a', inputs(live)), /stale run/);
+    await assert.rejects(recordMemberAcceptance(current, 'a', inputs(live)), /not confirmed finished/);
+    const saved = JSON.parse(await readFile(recordPath(run.members[0])));
+    assert.equal(saved.receipt, null);
+    assert.equal(saved.sequence, 1);
+  } finally { await rm(checkout, { recursive: true, force: true }); }
+});
+
+test('a foreign-machine member cannot satisfy the freeze guard', async () => {
+  const { checkout, run, records, observedByTask } = await scratchRun();
+  try {
+    await writeFile(recordPath(run.members[1]), JSON.stringify({ ...records.b, machine: 'remote' }));
+    const foreign = { ...observedByTask, b: { ...observedByTask.b, machine: 'remote' } };
+    await assert.rejects(recordMemberAcceptance(run, 'a', inputs(foreign)), /does not match/);
+    assert.equal(JSON.parse(await readFile(recordPath(run.members[0]))).receipt, null);
+  } finally { await rm(checkout, { recursive: true, force: true }); }
+});
+
+test('ownership changed during acceptance cannot approve itself', { timeout: 5000 }, async () => {
+  const { checkout, run, records, observedByTask } = await scratchRun();
+  let gate;
+  try {
+    const aPath = recordPath(run.members[0]);
+    const bPath = recordPath(run.members[1]);
+    await rm(bPath);
+    execFileSync('/usr/bin/mkfifo', [bPath]);
+    const pending = recordMemberAcceptance(run, 'a', inputs(observedByTask));
+    const rejected = assert.rejects(pending, /own work|stale sequence/);
+    // Opening the writer waits until acceptance has read a and is reading b.
+    gate = await open(bPath, 'w');
+    await assert.rejects(writeRun(runPath(run), { ...run, sequence: 2 },
+      { writer: 'parent', expectedSequence: 1 }), { code: 'EEXIST' });
+    await writeRecord(aPath, { ...records.a, sequence: 2, owner: 'parent' }, { writer: 'parent', expectedSequence: 1 });
+    await gate.writeFile(JSON.stringify(records.b));
+    await gate.close(); gate = undefined;
+    await rejected;
+    const saved = JSON.parse(await readFile(aPath));
+    assert.equal(saved.sequence, 2);
+    assert.equal(saved.receipt, null);
+    await writeRun(runPath(run), { ...run, sequence: 2 }, { writer: 'parent', expectedSequence: 1 });
+  } finally {
+    if (gate) await gate.close();
+    await rm(checkout, { recursive: true, force: true });
+  }
 });

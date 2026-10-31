@@ -381,3 +381,44 @@ changed.
   an API field.
 - Claude Code installation of the companion was validated by manifest only.
   Codex installation was not exercised.
+
+## PR 23: interrogation fixes — 2026-10-31
+
+Fixed the five independently reproduced scope and acceptance defects:
+
+- Scope checks now compare resolved absolute targets, including existing symlinks
+  and ancestors of files not yet created. Non-normalized checkout paths fail.
+  Case and Unicode-normalization variants conservatively conflict on every host.
+  Workers cannot reach protected records through aliases or from a checkout
+  containing the coordinator checkout. Dangling symlinks and writes outside the
+  checkout fail validation; disjoint symlink targets remain usable.
+- Acceptance takes the same run-index lock used by `writeRun` and holds it through
+  receipt publication. The complete supplied index must match the persisted
+  index, so neither an older sequence nor a truncated member list can omit a
+  live writer. Concurrent index writes fail with an occupied lock.
+- Reconciled member records must match the run's machine as well as its task,
+  checkout and coordinator.
+- The shared `acceptanceReceipt` checks owner/coordinator equality on the record
+  actually being accepted. A coordinator ownership update between roster
+  reconciliation and receipt creation can no longer bypass the self-acceptance
+  guard. A later update is still rejected by the existing sequence check.
+
+Added five regression tests in `workflows/roster.test.mjs`. All five failed
+against the original code, then passed with the fixes. The concurrency test uses
+an actual FIFO to pause a sibling read, updates the target's owner through
+`writeRecord`, and verifies rejection without a receipt. It also verifies that
+`writeRun` cannot update the locked index during acceptance and that the lock is
+released after rejection. Existing acceptance fixtures now persist their run
+index before use.
+
+Validation on Node 24.22.2: all 73 tests passed, including the 23 Task & Evidence
+tests and unchanged schema 1 fixtures. `git diff --check` passed.
+`herdr-app check mods/task-evidence` passed outside the sandbox. Its initial
+sandboxed attempt emitted macOS GUI-service connection errors and hung; it was
+interrupted before the successful retry. No live UI or worker pilot was rerun,
+no mod code changed, and no personal configuration was changed.
+
+Limits: validation observes local filesystem state; it does not prevent a worker
+from changing symlinks after validation. Revalidate immediately before launch,
+keep targets stable while workers run, and inspect actual edits. Conservative
+case folding also rejects case-only distinctions on case-sensitive filesystems.
