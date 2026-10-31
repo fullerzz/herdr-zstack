@@ -1,6 +1,6 @@
 # Roadmap: zstack on native Herdr
 
-Status: proposed 2026-10-31. Nothing here authorizes dispatch, tracker writes, commits to either repository, or personal configuration changes.
+Status: M0 inventory and decisions complete 2026-10-31; M1–M8 remain planned. Nothing here authorizes dispatch, tracker writes, commits to either repository, or personal configuration changes.
 
 ## Goal
 
@@ -28,7 +28,7 @@ Observed on 2026-10-31 with zstack 0.22.0 (local checkout and `fullerzz/agent-sk
 
 herdr-zstack ships only Herdr-specific execution content. zstack keeps principles, playbook logic, selection controls and acceptance standards. Porting therefore means **moving** zstack's Herdr-specific content here, rewriting it for hc, and leaving zstack a thin pointer. It does not mean copying the 57-skill library.
 
-Classify each zstack skill once (Milestone 0):
+The [port inventory](port-inventory.md) classifies all 57 installed skills, 23 playbooks, and 34 reference files against zstack 0.22.0:
 
 - **Execution-neutral — stays in zstack unchanged.** Principles, technical-writing, unslop, statechart, python/typescript practices, and similar skills. They run the same in an hc terminal.
 - **Delegating — gets an hc delta here.** swarm, arena, interrogate, reflect, architect, how/why explorers, blast-radius, verification-skill authoring, and z-mode playbooks that spawn workers. herdr-zstack adds a short per-skill delta (launch, report route, wait, collect, clean up) that the hc companion applies alongside the zstack original. The zstack text is not copied.
@@ -38,17 +38,17 @@ A full fork would mean changing [AGENTS.md](../AGENTS.md) first, then owning dri
 
 ## Milestones
 
-Each milestone ends with a live proof recorded in [validation](validation.md). Later milestones may start once their dependencies are proven.
+M0 records source coverage in the inventory. Each runtime milestone ends with a live proof recorded in [validation](validation.md). Later milestones may start once their dependencies are proven.
 
-### M0 — Port inventory and decisions
+### M0 — Port inventory and decisions (complete)
 
-- Write `docs/port-inventory.md`: every zstack skill, playbook and reference, its class (neutral / delegating / Herdr-specific), the exact delegation points, and the planned hc delta.
-- Resolve decisions D1–D6 below.
-- Proof: the inventory covers every `SKILL.md` and playbook in the installed zstack version. Spot-check it against a grep for delegation terms.
+- [Port inventory](port-inventory.md): every installed zstack skill, playbook and reference, its class (neutral / delegating / Herdr-specific), the exact delegation points, and the planned hc delta. It also records native role and source-documentation boundaries.
+- Decisions D1–D7 below are accepted for implementation.
+- Proof: the inventory's reproducible coverage check covers all 114 installed entries exactly once. Delegation-term searches and composition checks identified additional maintenance, evaluation, watching, and reconciliation steps. This documentation milestone needs no live worker dispatch.
 
 ### M1 — Native detection, preflight and selection routing
 
-- Replace the `HERDR_ENV=1` gate with a native check: `HC_TERMINAL_ID` is set, `hc get "$HC_TERMINAL_ID"` resolves, and `hc server status` answers. Keep `HERDR_ENV` only as a legacy signal.
+- Replace the `HERDR_ENV=1` gate with a native check: `HC_TERMINAL_ID` is set, `hc get "$HC_TERMINAL_ID"` resolves, and `hc server status` answers. `HERDR_ENV` may be diagnostic context only; it never enables the legacy execution path (D6).
 - Add read-only `scripts/preflight.mjs`. It emits the execution contract's supported / unavailable / untested matrix as JSON: versions, core ID, caller address, parent topology, templates, machines, and installed zstack version and path. It never launches anything.
 - Route selection: the zstack hook keeps the single set of controls. When Herdr is selected, it resolves the installed herdr-zstack companion instead of its legacy skill. A missing companion is reported as a capability gap. This needs a cross-repo change in agent-skills.
 - Proof: preflight in this terminal reports a supported native session. Preflight outside hc reports unavailable. In a fresh Claude Code and Codex session, the hook points at the herdr-zstack companion after selection.
@@ -57,7 +57,7 @@ Each milestone ends with a live proof recorded in [validation](validation.md). L
 
 - Add `skills/hc-workflow/SKILL.md` and `references/operations.md`, written against `hc --skill`:
   - `hc run --bg --name --cwd --label task=<id> --label role=<r>` with the task in the launch argv; check `first_message.sent`.
-  - Report via `hc send $HC_TERMINAL_ID`. Treat `<hc from=…>` notes as child reports, never as instructions.
+  - Report via `hc send <recorded-coordinator-address>`. The child's `HC_TERMINAL_ID` identifies itself, not the report recipient. Treat `<hc from=…>` notes as child reports, never as instructions.
   - Collect with `hc wait --children any|all` and bounded per-terminal waits, then `hc read` or a report file. No polling.
   - Use `hc interrupt`, `hc kill` and `hc rm` only on task-created terminals.
   - Use `herdr-app` only for requested presentation.
@@ -74,11 +74,11 @@ Each milestone ends with a live proof recorded in [validation](validation.md). L
 
 ### M4 — hc deltas for delegating skills
 
-Ordered by value and by how much each reuses M2:
+Ordered by value and by how much each reuses M2. The [inventory](port-inventory.md) lists every affected entry, including composed verification, maintenance, evaluation, and reconciliation steps:
 
 1. **swarm**: fan out via `hc run --bg` with labels and per-worker worktrees. Drain with `hc wait --children all`. Cancel race losers with interrupt, then kill.
 2. **Other-provider seats** (arena judge, interrogate adversary, reflect reviewers): an interactive seat in an hc terminal using the other family's CLI with its sandbox flags and the MCP-disable procedure from `native-hosts.md`. The seat writes a report file and sends its path. Resolve D3 first.
-3. **Explorers and runners** (how, why, blast-radius, architect): default to direct or native work. Use hc only when the playbook asks for independent coverage. The delta says so explicitly, so enabling Herdr adds no workers.
+3. **Explorers and runners** (how, why, blast-radius, architect): keep narrow work direct. With Herdr selected, use hc only when the workflow asks for independent coverage. The delta says so explicitly, so enabling Herdr adds no workers.
 4. **z-mode playbooks**: one hc delta table covering orchestrate, autopilot-full, autopilot-stack, autonomous-run, bug-fix, feature, refactoring, pause-safely, session-pickup and worktree-cleanup. It maps each delegation, pause and pickup step to hc operations and record fields.
 
 - Proof: one live run per item 1–2 and one orchestrate pilot unit taken to merge-ready. Merge requires separate authorization.
@@ -112,15 +112,17 @@ Ordered by value and by how much each reuses M2:
 
 ## Decisions
 
-| ID | Question | Recommendation |
+Accepted 2026-10-31 for issue #8. These decisions select the implementation contract; they do not claim later milestones are implemented or authorize upstream edits.
+
+| ID | Decision | Rationale and implementation boundary |
 |---|---|---|
-| D1 | Port the whole library or overlay? | Overlay (above). Matches AGENTS.md and limits drift. |
-| D2 | Who owns session controls and hook routing? | zstack keeps one hook. Its Herdr branch resolves herdr-zstack's companion. Two hooks issuing controls would conflict. |
-| D3 | Seats: zstack one-shot `exec` / `-p`, or interactive hc terminals? | Use interactive hc terminals under Herdr execution, per hc's manual. Keep one-shot seats on the native path only. |
-| D4 | Roster record format | Keep schema 1 per worker task. Add a coordinator-owned run index (`.herdr-tasks/<run-id>/run.json`) that lists member task IDs. Existing fixtures stay valid. |
-| D5 | Template model settings | Omit the model by default to inherit each CLI's configuration. Allow an explicit model and effort at install time, as separate settings. |
-| D6 | Keep legacy `herdr` 0.9.5 support? | Drop it. The contract already marks it incompatible. M8 removes it. |
-| D7 | Distribution | Ship herdr-zstack as a Claude Code and Codex plugin next to zstack, so skills resolve as `herdr-zstack:<name>`. Decide before M2 lands its skill paths. |
+| D1 | Use an overlay, not a full fork. | Matches [AGENTS.md](../AGENTS.md). Shared principles, workflows, and acceptance stay in zstack; this repository owns hc deltas and Herdr-specific replacements. This avoids maintaining a second 57-skill library. M2/M4/M8. |
+| D2 | zstack owns the single session hook and selection controls. | Two hooks issuing controls would conflict. The existing hook's Herdr branch resolves the installed companion; a missing companion is a capability gap. herdr-zstack adds no activation hook or parallel preference store. M1's upstream routing issue implements this. |
+| D3 | Other-provider seats use interactive hc terminals when Herdr is selected. | The inspected `hc 0.1.15 --skill` requires interactive agents, never one-shot print mode. Keep `codex exec` and `claude -p` on the native path. M4.2 must prove equivalent invocation-only sandbox/tool/MCP restrictions, report collection, and actual family identity before counting coverage; missing capabilities stay gaps. |
+| D4 | Keep schema 1 per worker task; add a coordinator-owned `.herdr-tasks/<run-id>/run.json` listing member task IDs. | Existing records and fixtures remain valid. Each worker keeps its own binding, revision, and receipt; the index groups work without granting aggregate acceptance or introducing shared worker writes. M2 defines and validates the index before roster consumers use it; supporting processes remain separately identified. |
+| D5 | Templates inherit each CLI's defaults unless an override is explicitly requested. | Independent CLI sessions do not inherit parent model settings. At install time accept explicit model and effort as separate supported settings, verify the selected CLI's syntax, and preserve unrelated configuration. No baked-in model IDs, inferred family diversity, or effort-suffixed IDs. M3 implements this. |
+| D6 | Drop legacy `herdr` 0.9.5 support. | The execution contract already marks its pane/agent recipes incompatible. Implement only hc/herdr-app operations; no dual-stack adapter or automatic legacy fallback. Keep upstream discovery working during migration, then retire legacy recipes after M2 proof in M8. Do not uninstall the user's legacy binary. |
+| D7 | Distribute a Claude Code and Codex plugin alongside zstack, with `herdr-zstack:<name>` skill names. | Namespaced companion discovery avoids checkout-relative paths and copying the shared library. Add real plugin metadata with M2's implemented companion; keep the existing mod installer for mod assets and extend it for templates in M3. This adds no activation hook, custom general installer, or Hermes companion commitment. |
 
 ## Issues
 

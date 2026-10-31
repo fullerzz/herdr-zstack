@@ -33,7 +33,7 @@ For the initial development setup, `personal-task-evidence` is a copy of the exi
 
 Prove one complete flow before expanding: establish task → launch one authorized worker through hc → collect result → verify revision → present evidence → pause and reconcile on pickup. Keep durable supervision outside layout-owned mod lifetimes.
 
-The [roadmap](docs/roadmap.md) ports zstack's Herdr-specific workflows onto hc and adds hc deltas for its delegating skills. The completed foundation issues:
+The [roadmap](docs/roadmap.md) ports zstack's Herdr-specific workflows onto hc and adds hc deltas for its delegating skills. The [port inventory](docs/port-inventory.md) covers the installed zstack 0.22.0 baseline and records the planned execution changes; roadmap decisions D1–D7 are accepted. The completed foundation issues:
 
 1. [Execution contract and zstack compatibility](https://github.com/fullerzz/herdr-zstack/issues/1)
 2. [Task records and verification receipts](https://github.com/fullerzz/herdr-zstack/issues/2)
