@@ -1,0 +1,12 @@
+{
+  "name": "herdr-zstack",
+  "version": "0.1.0",
+  "description": "Native hc execution companion for Herdr-selected zstack sessions.",
+  "author": {
+    "name": "Zach Fuller",
+    "url": "https://github.com/fullerzz"
+  },
+  "repository": "https://github.com/fullerzz/herdr-zstack",
+  "license": "MIT",
+  "skills": "./skills/"
+}

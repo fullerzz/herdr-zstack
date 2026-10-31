@@ -1,0 +1,20 @@
+{
+  "schemaVersion": 1,
+  "sequence": 1,
+  "runId": "roster-pilot",
+  "coordinator": "coordinator-1",
+  "machine": "local",
+  "checkout": "/work/pilot",
+  "members": [
+    {
+      "taskId": "pilot-a",
+      "checkout": "/work/pilot",
+      "writes": ["src/a.js", ".herdr-tasks/pilot-a/report.md"]
+    },
+    {
+      "taskId": "pilot-b",
+      "checkout": "/work/pilot",
+      "writes": ["src/b.js", ".herdr-tasks/pilot-b/report.md"]
+    }
+  ]
+}

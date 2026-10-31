@@ -1,0 +1,13 @@
+{
+  "name": "herdr-zstack-local",
+  "description": "Local herdr-zstack checkout for Claude Code.",
+  "owner": { "name": "Zach Fuller" },
+  "plugins": [
+    {
+      "name": "herdr-zstack",
+      "source": "./",
+      "description": "Native hc execution companion for Herdr-selected zstack sessions.",
+      "category": "productivity"
+    }
+  ]
+}

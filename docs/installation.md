@@ -50,6 +50,27 @@ a killed process, inspect ownership, files, the lock and any
 temporary file for recovery. Remove a stale lock only after confirming its process
 has stopped; review any temporary state before moving it aside.
 
+## hc companion skills
+
+The repository root is also a `herdr-zstack` plugin. Its manifests are
+`.claude-plugin/plugin.json` and `.codex-plugin/plugin.json`. It ships
+`herdr-zstack:hc-workflow` and `herdr-zstack:single-worker`. Both are
+explicit-only, and neither installs a hook or activates a mode. zstack's session
+hook resolves the companion only after the user selects Herdr. A missing or
+ambiguous install is a capability gap.
+
+For Claude Code, add this checkout as a directory marketplace, then install the
+plugin:
+
+```sh
+claude plugin marketplace add /absolute/path/to/herdr-zstack
+claude plugin install herdr-zstack@herdr-zstack-local
+```
+
+`claude plugin validate .` checks the manifests. Codex installation of the
+companion has not been exercised. Do not copy the skill into personal
+configuration to work around that.
+
 For presentation, follow [the portable recipe](../examples/layout-recipe.md).
 The mod's `place: none` does not activate a layout.
 
