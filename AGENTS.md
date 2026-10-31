@@ -9,6 +9,7 @@ This repository owns Herdr-specific execution workflows, mods, layouts, and runt
 - Use `hc` for authorized task-owned agents, terminals, long-running checks, and process supervision; use `herdr-app` for workspace presentation and navigation. Verify installed CLI help before using syntax. Ordinary file edits and brief checks may use direct tools.
 - Developing or installing this repository does not activate z-mode or Herdr execution. Explicit session selection and host permissions still govern delegation. Workers do not inherit parent controls, credentials, conversation, or approval authority.
 - Do not dispatch agents, write trackers, commit, push, publish, or change unrelated personal configuration without authorization. Preserve concurrent changes.
+- Use Conventional Commit messages: `type: description` or `type(scope): description`, such as `feat: add a collapsible task sidebar`, `fix: restore panel selection`, or `docs: update installation steps`.
 - Clone shipped layouts before changing them. Preserve personal layouts, keybindings, and other mods. Never infer the task's target from whichever terminal has focus.
 - Treat task identity, terminal/session identity, runtime activity, and acceptance as separate facts. A restored terminal may contain a fresh shell. Reconcile before sending prompts; never replay an assignment automatically.
 - Mods are trusted code. Keep Task & Evidence read-only: file reads and navigation only, no record writes, command execution, or agent messaging.
