@@ -25,7 +25,7 @@ Host restrictions, available sandbox enforcement, user authorization, and the ho
 | Operation | Owner / interface | Capability and evidence boundary |
 |---|---|---|
 | Local file edits and brief checks | Host file and execution tools | Supported; ordinary direct work stays direct. |
-| Start an authorized worker | `hc run --bg --name … --cwd … --parent …` | Supported syntax; worker launch, template, model and sandbox behavior untested here. Always interactive; Codex requires `--no-daemon`. |
+| Start an authorized worker | `hc run --bg --name … --cwd … --parent …`, or an installed role template | Supported. Live launches and role templates are recorded in [validation](validation.md). Model overrides are untested live. Always interactive; Codex requires `--no-daemon`, and its `read-only` sandbox blocks `hc send`. |
 | Start a useful long check, server or watcher | `hc run` with explicit cwd and ownership | Supported; runtime supervision untested here. A foreground timeout leaves the program running. |
 | Inspect, collect and wait | `hc get`, `hc read`, `hc wait --timeout …` | Supported; bounded waits, then fresh output/artifacts. No polling sleeps; idle/done is readiness, not acceptance. |
 | Interrupt and clean up | `hc interrupt`, then task-owned `hc kill` / `hc rm` as appropriate | Supported; interruption stops a turn, not necessarily the process. Cleanup/recovery untested here. |

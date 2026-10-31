@@ -33,6 +33,7 @@ hc run --bg --json --name <run>-<task> --cwd <checkout> \
 ```
 
 - Put the task in the launch argv. A message sent to a booting agent can be dropped.
+- When `hc templates` lists an installed herdr-zstack role (`z-agent-claude`, `z-agent-codex`, `comment-sicko-claude`, `comment-sicko-codex`), pass its name in place of `<cli and flags>`. The template supplies the role and report rules. The task must still give the absolute z-mode `SKILL.md` path, the coordinator's literal address, the task ID and any report path. With a template, hc sends the role and task as the first message once the agent is ready, and the response includes `first_message`. See [installation](../../../docs/installation.md#hc-role-templates).
 - Launch the CLI directly, not through `env` or a shell wrapper. hc must see the agent to report its status and first-message delivery.
 - Codex needs `--no-daemon`. Never use one-shot print modes or auto-approval flags.
 - Save the full JSON response. When it has `first_message`, check `first_message.sent`. If it is false, the task was not sent: run `hc read <t>` and resolve readiness, such as a trust dialog, before sending once. If the field is absent, or the response is a timeout or transport error, delivery is unknown. Read the screen before any input.
