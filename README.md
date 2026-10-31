@@ -23,7 +23,9 @@ Herdr supplies `gpui-kit`, `gpui-base`, and `herdr` at runtime; do not install t
 
 ## Install locally
 
-Follow the [installation guide](docs/installation.md) and [mod configuration guide](mods/task-evidence/README.md). The installer copies all runtime modules to `zstack-task-evidence`; add its block to a personal layout clone. Installed files are copies; source edits require an explicit update. No installation happens from running tests.
+Follow the [installation guide](docs/installation.md) and [mod configuration guide](mods/task-evidence/README.md). The installer copies the viewer to `zstack-task-evidence` and its tab bar to
+`zstack-task-evidence-tabs`. Follow the [shared sidebar recipe](examples/layout-recipe.md)
+to add a collapsible Task & Evidence button beside Files and Changes in a personal layout clone. Installed files are copies; source edits require an explicit update. No installation happens from running tests.
 
 For the initial development setup, `personal-task-evidence` is a copy of the existing personal layout; switching back to `personal` restores the previous presentation. Task paths are explicit and the viewer does not infer success from agent status.
 

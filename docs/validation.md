@@ -153,3 +153,30 @@ this pass verified the refreshed receipt rendering.
 | #4 | App closure with surviving binding, core/worker loss, stale/reused occupant, unavailable remote, stale revision and scoped pause are simulated in lifecycle tests. No host-restart claim; simulations are allowed by the issue. Real pilot supplies process accounting and final safe handoff. |
 | #5 | Native checker, prior live selection/refresh/scroll/layout checks and refreshed real receipt rendering; the panel remains read-only and labels unavailable ownership evidence. |
 | #6 | Disposable installer tests include update/rollback/recovery hardlink protection; all 37 Node tests pass locally. Remote clean-checkout CI must pass on the published PR before closeout. |
+
+## Shared Task & Evidence sidebar — 2026-10-31
+
+Added a personal Herdr 0.1.10 tab-bar copy with Task & Evidence beside Files and
+Changes. The button uses the same `panel` / `panel-body` show, hide and selection
+commands and remembers panel choice/closed state per space. It appears only when
+that layout contains the task block. The installer owns both namespaced mods;
+layout changes remain explicit.
+
+- All 41 Node tests passed, including button toggling, switching, per-space restore,
+  existing Files/Changes preferences, and two-mod install/remove/rollback.
+- Native checks passed for `mods/task-evidence` and `mods/task-evidence-tabs`.
+  The sandboxed checker could not access macOS services and was interrupted;
+  the checks passed when rerun with native host access.
+- Installed both namespaced mods, moved the existing configured block inside the
+  personal layout's shared stack, and retained its task props. Shipped layouts,
+  original `personal`, keybindings and terminal topology were preserved.
+- Live clicks verified open, collapse, Files, Changes, return to Task & Evidence,
+  async Markdown reads, Verification artifact selection and Refresh. App status
+  reported no errors. Screenshots are temporary local evidence under
+  `/private/tmp/herdr-task-panel-{closed,files,changes,artifact,refreshed}.png`.
+- Pre-change personal layout: `/private/tmp/herdr-task-evidence-layout-before.json`.
+  Switching to `personal` also restores the original presentation.
+
+Limits: per-space restore has unit coverage; app restart, remote reads and Windows
+window controls were not exercised live. The personal tab-bar copy is pinned to
+Herdr 0.1.10 and needs comparison with shipped tabs after future host upgrades.

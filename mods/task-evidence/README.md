@@ -4,6 +4,11 @@ A read-only native GPUI panel with explicit task-record selection, brief/artifac
 
 Follow [installation](../../docs/installation.md) to install the runtime as `zstack-task-evidence` and add it to a personal layout clone. The installer includes all sibling runtime `.js` modules; copying only the original three files is insufficient.
 
+Use the [shared sidebar recipe](../../examples/layout-recipe.md) for a top-row
+Task & Evidence button beside Files and Changes. Clicking the active button
+collapses the sidebar; switching buttons replaces its contents. Selection and
+closed state are remembered per space.
+
 Configure its block props:
 
 ```json

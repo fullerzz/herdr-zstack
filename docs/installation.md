@@ -21,8 +21,9 @@ node scripts/install.mjs rollback --home "$HOME/.config/herdr-app"
 node scripts/install.mjs rollback --home "$HOME/.config/herdr-app" --apply
 ```
 
-Only direct runtime `.js` files and `mod.json` from `mods/task-evidence` are
-copied into `mods/zstack-task-evidence`. Tests, generated typings and editor
+Direct runtime `.js` files and `mod.json` from `mods/task-evidence` and
+`mods/task-evidence-tabs` are copied into `mods/zstack-task-evidence` and
+`mods/zstack-task-evidence-tabs`, respectively. Tests, generated typings and editor
 files are excluded. Runtime modules must remain direct siblings. Ownership
 hashes and the previous transaction's contents live in
 `.herdr-zstack-install.json` at the app home. Keep that file to retain removal

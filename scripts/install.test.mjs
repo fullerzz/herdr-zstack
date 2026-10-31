@@ -13,7 +13,7 @@ function fixture(t) {
   for (const name of ['main.js', 'model.js', 'task-record.js', 'mod.json']) fs.writeFileSync(path.join(source, name), name);
   fs.writeFileSync(path.join(source, 'host.d.ts'), 'generated');
   fs.writeFileSync(path.join(source, 'main.test.mjs'), 'test');
-  const call = (action, apply = true) => run({ home, source, action, apply });
+  const call = (action, apply = true) => run({ home, source, tabsSource: null, action, apply });
   const installed = name => path.join(home, 'mods/zstack-task-evidence', name);
   return { home, source, call, installed, base };
 }
@@ -110,4 +110,18 @@ test('updates and rollback preserve hardlinked backups outside the app home', t 
   call('rollback');
   assert.equal(fs.readFileSync(updated, 'utf8'), 'updated');
   assert.equal(fs.readFileSync(installed('main.js'), 'utf8'), 'main.js');
+});
+
+test('default install owns both mods and rolls both back without touching layouts', t => {
+  const {home} = fixture(t);
+  run({home, apply:true});
+  const tab = path.join(home,'mods/zstack-task-evidence-tabs/main.js');
+  assert.match(fs.readFileSync(tab,'utf8'), /panelButton\("task-evidence"/);
+  fs.mkdirSync(path.join(home,'layouts'));
+  fs.writeFileSync(path.join(home,'layouts/personal.json'),'personal');
+  run({home, action:'remove', apply:true});
+  assert.equal(fs.existsSync(tab),false);
+  run({home, action:'rollback', apply:true});
+  assert.ok(fs.existsSync(tab));
+  assert.equal(fs.readFileSync(path.join(home,'layouts/personal.json'),'utf8'),'personal');
 });

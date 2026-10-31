@@ -6,8 +6,9 @@ import { fileURLToPath } from 'node:url';
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const stateName = '.herdr-zstack-install.json';
 const prefix = 'mods/zstack-task-evidence/';
+const tabsPrefix = 'mods/zstack-task-evidence-tabs/';
 const hash = data => createHash('sha256').update(data).digest('hex');
-const validPath = name => name.startsWith(prefix) && /^[a-zA-Z0-9_-]+\.(js|json)$/.test(name.slice(prefix.length));
+const validPath = name => [prefix, tabsPrefix].some(p => name.startsWith(p) && /^[a-zA-Z0-9_-]+\.(js|json)$/.test(name.slice(p.length)));
 
 function replaceFile(target, data) {
   fs.mkdirSync(path.dirname(target), { recursive: true });
@@ -37,19 +38,19 @@ function safePath(home, name = '') {
   return target;
 }
 
-export function run({ home, action = 'install', apply = false, source = path.join(root, 'mods/task-evidence') }) {
+export function run({ home, action = 'install', apply = false, source = path.join(root, 'mods/task-evidence'), tabsSource = path.join(root, 'mods/task-evidence-tabs') }) {
   if (!home || !path.isAbsolute(home)) throw new Error('--home must be an explicit absolute app configuration directory');
   if (!['install', 'update', 'remove', 'rollback'].includes(action)) throw new Error('Expected install, update, remove, or rollback');
   safePath(home);
-  if (!apply) return transact({ home, action, apply, source });
+  if (!apply) return transact({ home, action, apply, source, tabsSource });
   fs.mkdirSync(home, { recursive: true });
   const lockPath = safePath(home, '.herdr-zstack-install.lock');
   const lock = fs.openSync(lockPath, 'wx');
-  try { return transact({ home, action, apply, source }); }
+  try { return transact({ home, action, apply, source, tabsSource }); }
   finally { fs.closeSync(lock); fs.unlinkSync(lockPath); }
 }
 
-function transact({ home, action, apply, source }) {
+function transact({ home, action, apply, source, tabsSource }) {
   const statePath = safePath(home, stateName);
   const state = fs.existsSync(statePath) ? JSON.parse(fs.readFileSync(statePath, 'utf8')) : { version: 1, owned: {}, previous: null };
   if (state.version !== 1 || !state.owned || typeof state.owned !== 'object' || Array.isArray(state.owned)) throw new Error('Invalid installation state');
@@ -58,13 +59,15 @@ function transact({ home, action, apply, source }) {
   }
   const wanted = {};
   if (action === 'install' || action === 'update') {
-    for (const entry of fs.readdirSync(source, { withFileTypes: true })) {
-      if (!(entry.name.endsWith('.js') || entry.name === 'mod.json')) continue;
-      const name = prefix + entry.name;
-      if (!validPath(name) || !entry.isFile() || entry.isSymbolicLink()) throw new Error(`Invalid runtime file: ${entry.name}`);
-      wanted[name] = fs.readFileSync(path.join(source, entry.name));
+    for (const [directory, destination] of [[source, prefix], ...(tabsSource ? [[tabsSource, tabsPrefix]] : [])]) {
+      for (const entry of fs.readdirSync(directory, { withFileTypes: true })) {
+        if (!(entry.name.endsWith('.js') || entry.name === 'mod.json')) continue;
+        const name = destination + entry.name;
+        if (!validPath(name) || !entry.isFile() || entry.isSymbolicLink()) throw new Error(`Invalid runtime file: ${entry.name}`);
+        wanted[name] = fs.readFileSync(path.join(directory, entry.name));
+      }
+      if (!wanted[destination + 'main.js'] || !wanted[destination + 'mod.json']) throw new Error('Incomplete mod source');
     }
-    if (!wanted[prefix + 'main.js'] || !wanted[prefix + 'mod.json']) throw new Error('Incomplete mod source');
   } else if (action === 'rollback') {
     if (!state.previous || !state.previous.files || !state.previous.owned) throw new Error('No transaction to roll back');
     for (const [name, data] of Object.entries(state.previous.files)) {
