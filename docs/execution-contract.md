@@ -14,7 +14,7 @@ zstack owns selection, action authority, scoped briefs, exclusive write ownershi
 
 Native host execution remains the default. Only an explicit user selection enables Herdr execution for the current session; a request to develop this repository does not. z-mode selection is independent. Use only the current session's trusted hook controls when available; otherwise retain selection in conversation and the handoff. Never copy controls, session IDs, plugin state paths, credentials, or approval authority into a child. A new session must make its own selection.
 
-`HERDR_ENV=1` is required before Herdr discovery or control operations under the shared workflow. It does not identify a caller. For parent-linked execution, resolve `HC_TERMINAL_ID` with `hc get <explicit-address>` and verify the intended machine/core before dispatch. An operator may instead supply an explicit verified task parent. A standalone coordinator without a core terminal may deliberately use `--no-parent`, provided it records ownership, collection and cleanup responsibility itself. This is an explicit topology choice, never an automatic fallback for a stale parent. Focus and the app's current agent are never substitutes for identity. Task ownership and execution authorization are required even when no parent exists.
+A **native session** requires all three: `HC_TERMINAL_ID` is set, `hc server status` answers for the caller's core, and `hc get "$HC_TERMINAL_ID"` resolves that same address as a live terminal. `HERDR_ENV` is legacy diagnostic context only. It neither establishes nor enables native execution, and `HERDR_ENV=1` without `HC_TERMINAL_ID` is a legacy-only environment, not a native session. The hc 0.1.15 CLI starts a core on demand for `server status`, `get`, and other core commands. Detection must not invoke them when the caller's core could be missing. Ask the core named by `HC_TERMINAL_SOCKET` instead; that socket is the caller core's address. The hc CLI addresses `HC_SOCKET` when it is set, and otherwise a socket derived from `HC_SESSION` and the XDG directories. Dispatch through the CLI therefore needs that address to equal `HC_TERMINAL_SOCKET`. For parent-linked execution, the resolved caller is the parent; verify the intended machine/core before dispatch. An operator may instead supply an explicit verified task parent. A standalone coordinator without a core terminal may deliberately use `--no-parent`, provided it records ownership, collection and cleanup responsibility itself. This is an explicit topology choice, never an automatic fallback for a stale parent. Focus and the app's current agent are never substitutes for identity. Task ownership and execution authorization are required even when no parent exists.
 
 Host restrictions, available sandbox enforcement, user authorization, and the host's concurrency limit still apply to CLI workers. Count native and hc workers together. Do not install tools, log in, change personal configuration, restart the user's core, or expand permissions as preflight repair.
 
@@ -41,7 +41,27 @@ Host restrictions, available sandbox enforcement, user authorization, and the ho
 
 Before dispatch, record each requirement as **supported**, **unavailable**, or **untested**, with the command/evidence and consequence. Command presence alone does not establish runtime proof.
 
-1. Confirm current-session selection, authorization, `HERDR_ENV`, explicit task repository, requested action scope, and host concurrency budget. Source inspection can continue if execution is unavailable.
+`node scripts/preflight.mjs` emits the machine-checkable part of this matrix as JSON. It exits 0 for a supported native session, 1 when the session is unavailable, and 2 on a usage or internal error, including a flag without a value.
+
+Discovery details:
+- The report covers hc, herdr-app, core and zstack versions against the baseline, the core ID, the caller address and parent topology, templates, machines, and the installed zstack path.
+- zstack is judged by the current host's installed copy: `CLAUDECODE=1` selects Claude and `CODEX_THREAD_ID` selects Codex. Claude copies are found under `CLAUDE_CONFIG_DIR` (default `~/.claude`), and Codex copies under `CODEX_HOME` (default `~/.codex`).
+- Pass `--host claude|codex` when the host cannot be detected and the installed copies differ.
+- Pass `--zstack <dir>` to choose a copy explicitly.
+
+Preflight is strictly read-only:
+- It runs only `hc --version` and `herdr-app --version`, and lists them in `commands`.
+- It never runs an hc core command.
+- It sends only the read-only core methods `hello`, `server.status`, `terminal.get` (without `caller`, which would mark child news as seen), `templates.list` and `machine.list`. It sends them as JSON-RPC over `HC_TERMINAL_SOCKET` and lists them in `requests`.
+- A missing or vanished core is a failed connection, never a new core.
+- It reads local plugin manifests and the herdr-core configuration.
+- It never launches, sends, signals, or changes configuration.
+
+Before dialing the core, it requires that the hc CLI would address the same core. Any `socket` key in the herdr-core configuration, quoted or bare, makes that address unverified. So does Windows, where the CLI's socket placement has not been inspected.
+
+When a check fails, the report says why the session is unavailable. The steps below that need judgment (selection, authorization, scope, CLI capabilities) still apply. A supported report does not perform them.
+
+1. Confirm current-session selection, authorization, native-session detection, explicit task repository, requested action scope, and host concurrency budget. Source inspection can continue if execution is unavailable.
 2. Read `hc --version`, `hc --skill`, `hc --help`, relevant subcommand help, `herdr-app --version`, `herdr-app --skill`, and `herdr-app --help`. `hc server status` establishes the running core version; a binary version alone does not. `herdr-app status` establishes window availability only when presentation is needed.
 3. Resolve a parent-linked caller with an explicit `hc get` address, or record the deliberately parentless standalone coordinator. Record machine/core identity, parent address or its absence, coordinator ownership, repository/worktree, branch/revision and dirty files. Do not expose unrelated terminal contents. Read-only discovery never authorizes writes.
 4. Inspect available templates (`hc templates`) and the actual selected CLI's help/configuration within the authorized boundary. Verify interactive launch syntax, requested model and effort as separate settings, reporting route, needed tools, and permission/sandbox enforcement. A read-only brief is not a sandbox. Do not assume template names, bundled roles, credentials or models are inherited. Report model identity when exposed; otherwise record unavailable. Handle rejected model identifiers using the shared native-host contract; never repeatedly guess IDs.
@@ -61,4 +81,4 @@ Use fresh workers for new work and retries. Reuse only for costly agent-held sta
 
 If a required Herdr capability fails, disclose the exact gap. Continue independent direct work, but use only an explicitly user-selected fallback for the affected delegated slice; do not silently substitute native agents. Opt-out stops new dispatch and requires accounting for in-flight workers before transferring ownership.
 
-See [validation](validation.md#issue-1-execution-contract--2026-10-31) for observed checks and remaining proof.
+See [validation](validation.md#issue-1-execution-contract--2026-10-31) for observed checks and remaining proof, and [native detection and preflight](validation.md#issue-9-native-detection-and-preflight--2026-10-31) for the preflight's live results.

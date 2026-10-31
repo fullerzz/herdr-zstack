@@ -180,3 +180,101 @@ layout changes remain explicit.
 Limits: per-space restore has unit coverage; app restart, remote reads and Windows
 window controls were not exercised live. The personal tab-bar copy is pinned to
 Herdr 0.1.10 and needs comparison with shipped tabs after future host upgrades.
+
+## Issue 9: native detection and preflight — 2026-10-31
+
+Added `scripts/preflight.mjs`, a read-only JSON report of the execution
+contract's supported / unavailable / untested matrix. Native detection requires
+`HC_TERMINAL_ID`, an answering caller core and a live resolution of that
+address. `HERDR_ENV` is diagnostic only.
+
+### Host behavior
+
+Observed on hc 0.1.15 / macOS, using scratch `HC_SESSION` and XDG directories
+under `/tmp` (never the user's core):
+
+- The hc CLI **starts a core on demand** for both `hc server status` and
+  `hc get`. A fresh status answered with `uptime_ms: 10`. The manual says only
+  Windows `server status` never starts one.
+- The CLI ignores `HC_TERMINAL_SOCKET` and addresses `HC_SOCKET` when it is set.
+  hc also exports `HC_SOCKET` into terminals of a core started with it.
+  Otherwise the CLI derives the socket from `HC_SESSION` (default `default`):
+  - `$XDG_RUNTIME_DIR/herdr-core/<session>.sock` when `XDG_RUNTIME_DIR` is set;
+  - otherwise `${XDG_STATE_HOME:-~/.local/state}/herdr-core/<session>/<session>.sock`.
+- It also accepts a quoted `"socket" =` key in `config.toml`.
+- The core speaks JSON-RPC 2.0, one message per line, on its socket (`hc schema`,
+  protocol generation 1). `hello`, `server.status`, `terminal.get`,
+  `templates.list` and `machine.list` answered on the user's core with the same
+  data as the CLI.
+- Claude Code runs this directory-marketplace zstack plugin from its source
+  checkout. The session hook's `${CLAUDE_PLUGIN_ROOT}` resolved to
+  `/Users/zachfuller/Code/Misc/zachs-agent-skills`, whose manifest says 0.22.0.
+  The plugin cache copy is a stale 0.1.0. Codex uses its own 0.22.0 cache copy.
+
+Consequently, preflight never runs an hc core command. It sends those read-only
+methods to `HC_TERMINAL_SOCKET` directly, so an absent or vanished core is a
+failed connection, not a new core. `terminal.get` is sent without `caller`,
+because that parameter marks child news as seen. Before dialing, preflight
+requires that the hc CLI would address the same socket; otherwise dispatch could
+reach another core. Each scratch core was stopped with its own session's
+`hc server stop`, and the scratch directories were removed.
+
+### Interrogation fixes
+
+Three adversaries ran in isolated worktrees: two Claude Opus 5.5 native agents
+and one Codex `gpt-6.1-sol` CLI seat. Seven verified findings were fixed, and
+each original repro was rerun.
+
+| Finding | Before | After |
+|---|---|---|
+| 1a. `HC_SOCKET` elsewhere and a different `XDG_STATE_HOME` | The gate passed. `hc server status` started core `ec01cba7…` at `z.sock`, and the report marked it `supported`. | Unavailable: "the hc CLI would address …/z.sock, not the caller core". No `z.sock` and no state files were created. |
+| 1b. Inside a scratch terminal of a core started with `HC_SOCKET=y.sock` | Exit 1 with a false socket-mismatch reason. | Exit 0, supported: socket and CLI socket are both `y.sock`, caller `t1`. |
+| 2. Quoted `"socket" =` key in the config | The guard was skipped, and a core started at the custom socket. | Unavailable: "sets a socket". `custom.sock` was not created. |
+| 3. Core stopped after the readiness check | A replacement core started and was reported `supported`. | The stop was injected before the RPC: unavailable with `ENOENT`. No replacement and no `hc serve` remained. |
+| 4. Claude copy broken while the Codex copy is complete (`CLAUDECODE=1`) | `supported`, using the Codex path. | `unavailable`, naming the Claude copy's path and its missing native-host contract. |
+| 5. Installs found only through `CLAUDE_CONFIG_DIR` / `CODEX_HOME` | "no installed zstack found". | Both copies discovered. |
+| 6. No host detected and differing copies | `supported` with `path: null`. | `untested`: "pass --host or --zstack". Run live with `env -u CLAUDECODE`. |
+| 7. `--zstack` without a value | Exit 0, with automatic discovery. | Exit 2: "--zstack requires a value". |
+
+### Live results
+
+Results in this session's terminal (`HC_TERMINAL_ID=t16`, `HERDR_ENV` unset):
+
+- **Inside hc:** exit 0, `session.status: supported`.
+  - Core `d69141182c390e697d361b31591615ed` (`zachs-macbook-pro`). hc, core and herdr-app versions matched the baseline.
+  - Caller `t16` was live with root topology (no parent).
+  - Templates were unavailable (none installed). Machine `buntu26` was connected.
+  - zstack 0.22.0 resolved at the source checkout above.
+  - `commands` listed only `hc --version` and `herdr-app --version`. `requests` listed the five read-only methods.
+- **Outside hc** (`HC_TERMINAL_ID`, `HC_TERMINAL_SOCKET` and `HC_SCOPE` unset): exit 1, because `HC_TERMINAL_ID` is not set. Nothing was dialed. `HERDR_ENV=1` without an ID reported a legacy-only environment.
+
+### Fixture tests
+
+The 19 tests in `scripts/preflight.test.mjs` cover:
+
+- A supported session, with no terminal screen or status text in the report, and child topology.
+- A missing ID, and a legacy-only environment.
+- Unresolvable (`not_found`), finished and mismatched addresses.
+- Unreachable and vanished cores, with only the version commands run.
+- Protocol and core-identity mismatches.
+- `HC_SOCKET` naming the caller's core or another core.
+- Other CLI-socket mismatches and Windows.
+- Bare, quoted, table and dotted `socket` keys, plus the comment case.
+- Core failure, version drift, missing binaries and missing zstack.
+- Host-scoped zstack selection, the undetected-host case and the config-directory overrides.
+- The allowlist, socket placement, and `socketRpc` against a local line server (replies, early close, absent socket).
+- CLI usage errors.
+
+All 60 Node tests passed on Node 24.22.2. The 23 mod tests and
+`herdr-app check mods/task-evidence` passed, and `git diff --check` passed. No
+mod code changed.
+
+### Limits
+
+- A resolved address is not occupant identity.
+- The CLI-socket rule mirrors hc 0.1.15 as observed on macOS, so re-check it after hc upgrades.
+- Windows and any configured `socket` report unavailable instead of being checked.
+- The core protocol is undocumented beyond `hc schema`; preflight requires generation 1.
+- Template, machine and remote rows prove listing only.
+- Hook routing to a herdr-zstack companion (rest of M1) needs the agent-skills
+  change and is not part of this slice.
