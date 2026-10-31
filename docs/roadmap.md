@@ -1,6 +1,6 @@
 # Roadmap: zstack on native Herdr
 
-Status: M0 inventory and decisions complete 2026-10-31. M1 preflight and upstream routing are implemented; fresh interactive host routing remains unverified (see M1 below). M2's companion and two-worker pilot are implemented ([validation](validation.md#issue-11-hc-workflow-companion-and-two-worker-roster-pilot--2026-10-31)). M3's role templates are implemented ([validation](validation.md#issue-12-zstack-roles-as-hc-templates--2026-10-31)). M4–M8 remain planned. Nothing here authorizes dispatch, tracker writes, commits to either repository, or personal configuration changes.
+Status: M0 inventory and decisions complete 2026-10-31. M1 preflight and upstream routing are implemented; fresh interactive host routing remains unverified (see M1 below). M2's companion and two-worker pilot are implemented ([validation](validation.md#issue-11-hc-workflow-companion-and-two-worker-roster-pilot--2026-10-31)). M3's role templates are implemented ([validation](validation.md#issue-12-zstack-roles-as-hc-templates--2026-10-31)). M4.1's swarm addendum and live coverage/race pilots are implemented ([validation](validation.md#issue-13-hc-swarm-addendum--2026-10-31)); the rest of M4 and M5–M8 remain planned. Nothing here authorizes dispatch, tracker writes, commits to either repository, or personal configuration changes.
 
 ## Goal
 
@@ -78,7 +78,7 @@ M0 records source coverage in the inventory. Each runtime milestone ends with a 
 
 Ordered by value and by how much each reuses M2. The [inventory](port-inventory.md) lists every affected entry, including composed verification, maintenance, evaluation, and reconciliation steps:
 
-1. **swarm**: fan out via `hc run --bg` with labels and per-worker worktrees. Drain with `hc wait --children all`. Cancel race losers with interrupt, then kill.
+1. **swarm** (implemented in #13): the [hc addendum](../skills/swarm/SKILL.md) fans out via `hc run --bg` with labels and per-writer worktrees, drains with `hc wait --children all`, and cancels race losers with identity reconciliation, interrupt, state inspection, kill, finished confirmation and removal. [Live coverage and race evidence](validation.md#issue-13-hc-swarm-addendum--2026-10-31) records two workers per wave and the remaining interruption limits.
 2. **Other-provider seats** (arena judge, interrogate adversary, reflect reviewers): an interactive seat in an hc terminal using the other family's CLI with its sandbox flags and the MCP-disable procedure from `native-hosts.md`. The seat writes a report file and sends its path. Resolve D3 first.
 3. **Explorers and runners** (how, why, blast-radius, architect): keep narrow work direct. With Herdr selected, use hc only when the workflow asks for independent coverage. The delta says so explicitly, so enabling Herdr adds no workers.
 4. **z-mode playbooks**: one hc delta table covering orchestrate, autopilot-full, autopilot-stack, autonomous-run, bug-fix, feature, refactoring, pause-safely, session-pickup and worktree-cleanup. It maps each delegation, pause and pickup step to hc operations and record fields.

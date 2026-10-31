@@ -503,3 +503,96 @@ All 79 Node tests passed. `git diff --check` passed. No mod code changed, so `he
 - `z-agent-claude` was not run live. Model and effort overrides have test coverage only.
 - `hc send` returned `{"started":null,"status":null,"turn":0}` to a `cat` target, so delivery was confirmed by reading `coord`, not by the API response.
 - Installation into the real `~/.config/herdr-core` was not performed.
+
+## Issue 13: hc swarm addendum — 2026-10-31
+
+Added [the swarm addendum](../skills/swarm/SKILL.md) alongside the installed
+zstack 0.23.0 swarm. The hc companion links it only for the selected swarm
+workflow. Shared partitioning and acceptance remain in zstack; existing roster
+and schema 1 receipt producers are reused. Both Claude's frontmatter and Codex's
+`agents/openai.yaml` keep the new skill explicit-only. No mod code changed.
+
+### Live setup
+
+The user explicitly enabled Herdr for these pilots, limited workers to two at a
+time, and authorized Codex's persisted trust entry for the scratch repository.
+The calling session had no `HC_TERMINAL_ID`; its initial preflight correctly
+reported unavailable. A dedicated task-owned Node coordinator (`t1`) ran in an
+isolated `HC_SESSION=swarm13`, with scratch XDG configuration/state under
+`/private/tmp/herdr-swarm-13`. Its own native preflight reported supported and
+its literal address was used as the explicit parent and report recipient.
+The user's default core was never controlled.
+
+Inspected versions: hc/core 0.1.16, herdr-app 0.1.11, Node 24.22.2, Codex
+0.166.0. The worker screens exposed GPT-6.1-Sol, xhigh, from CLI defaults;
+no model or effort override was supplied. Each interactive Codex used
+`--no-daemon --sandbox workspace-write --ask-for-approval never`, with apps,
+plugins and all eleven discovered MCP servers disabled by invocation flags.
+A representative `codex sandbox -P :workspace` Node assertion exited 0.
+No hook trust was granted. No shared library or global plugin was installed.
+
+Four sibling writer worktrees started from scratch commit
+`a5a06fc841cbf7b032ddc412a22d03572225c1d0`, outside the coordinator checkout.
+Each had its own task record, report and exclusive `result.txt`. Before launch,
+the coordinator wrote the run index and launch-attempt argv. Names and labels
+carried run/task/role. Direct launches omitted `first_message`; screens proved
+each prompt arrived once, with no resend. Bindings combined core ID/process
+start identity and terminal/occupant PID/start identity, rechecked before control.
+
+### Coverage report — PASS
+
+Done predicate: both slices report PASS and pass coordinator exact-content,
+exclusive-write and stable-revision checks. `hc wait t1 --children all
+--timeout 30` returned both children done. Both reports arrived via `hc send t1`
+and were read before acceptance. Each frozen worktree got a separate receipt
+through `recordMemberAcceptance` using matching before/after observations.
+
+| Slice | Terminal | Result/check | Accepted dirty digest | Cleanup |
+|---|---|---|---|---|
+| coverage-a | t2 | PASS; exact `coverage-a:PASS\n`, exit 0 | `sha256:9cdd88e2b85aa1156fac7938642f0bfd277a32bc018c4775d5e29e670155ca3a` | killed, confirmed finished, removed |
+| coverage-b | t3 | PASS; exact `coverage-b:PASS\n`, exit 0 | `sha256:1b590f485de8ac2c49e81f9644ca58259be0bae62f4b5885f88e649d3984c259` | killed, confirmed finished, removed |
+
+### Race report — PASS
+
+Both candidates received the same exact-output task (`42\n`) and checks.
+Selection used the first delivered report that passed coordinator verification,
+not the first done badge: `race-b` reported first, while `hc wait t1 --children
+any --timeout 30` returned `race-a` done. `race-b` was frozen and accepted with
+exact-content, exclusive-write and stable-revision checks, all exit 0.
+
+| Candidate | Terminal | Outcome | Evidence | Cleanup |
+|---|---|---|---|---|
+| race-b | t5 | PASS, selected | report and coordinator check; accepted digest `sha256:d06a970043e631fedcacd3afc1ec9471932ae877a622414856ca10c92900ccf1` | killed, confirmed finished, removed |
+| race-a | t4 | completed, unselected | PASS report retained; `hc interrupt` returned `key: esc, outcome: stopped`; fresh get changed live/done to live/idle | killed, fresh get confirmed finished/reason killed, removed |
+
+The final `hc wait t1 --children all --timeout 30` drained the owned remainder.
+All four worker addresses were accounted for. The coordinator was then killed,
+confirmed finished and removed. The isolated core's final `hc ls --all` returned
+`terminals: []`, and only that scratch core was stopped. Worktrees and evidence
+remain available; no unrelated terminals, worktrees or user core were touched.
+
+Raw temporary evidence is under `/private/tmp/herdr-swarm-13`: `preflight.json`,
+`mcp-check.json`, `parent-reports.txt`, `race-wait-any.json`, `race-drain.json`,
+`cleanup.json`, and each member's `.herdr-tasks/<task>/` records, launch argv,
+reports, screens, identity snapshots, kill/finished/removal responses and
+coordinator checks. These are local artifacts, not portable dependencies.
+
+### Local checks and limits
+
+- All 79 Node tests passed, including the existing schema 1/roster tests and
+  mod tests. `herdr-app check mods/task-evidence` passed with host UI access;
+  its sandboxed attempt stalled and was terminated before retrying.
+- `claude plugin validate .` passed (existing missing-icon warning). Skill
+  naming, local links and both explicit-only policies passed an assert-based
+  YAML check. The generic skill validator rejects Claude's required
+  `disable-model-invocation` field; a temporary normalized copy passed it,
+  while the original field and Codex policy were asserted separately.
+- `git diff --check` passed. No live mod UI inspection was needed for this
+  instruction-only change, and installed-plugin discovery after an update was
+  not exercised.
+- The race loser had already completed its turn before interruption. This
+  proves live done → idle → finished → removed, not interruption of an actively
+  working turn. Larger rosters, bounded multi-wave coverage, unrelated sibling
+  children, remote workers, lost identity and failed cleanup were not exercised
+  in these live pilots. Scope enforcement remains by sandbox, brief and
+  coordinator inspection; it is not a separate per-file sandbox.
