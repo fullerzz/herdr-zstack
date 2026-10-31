@@ -49,7 +49,7 @@ M0 records source coverage in the inventory. Each runtime milestone ends with a 
 ### M1 — Native detection, preflight and selection routing
 
 - Replace the `HERDR_ENV=1` gate with a native check: `HC_TERMINAL_ID` is set, `hc get "$HC_TERMINAL_ID"` resolves, and `hc server status` answers. `HERDR_ENV` may be diagnostic context only; it never enables the legacy execution path (D6).
-- Add read-only `scripts/preflight.mjs`. It emits the execution contract's supported / unavailable / untested matrix as JSON: versions, core ID, caller address, parent topology, templates, machines, and installed zstack version and path. It never launches anything.
+- Add read-only `scripts/preflight.mjs`. It emits the execution contract's supported / unavailable / untested matrix as JSON: versions, core ID, caller address, parent topology, templates, machines, and installed zstack version and path. It never launches anything. Implemented in #9: see [validation](validation.md#issue-9-native-detection-and-preflight--2026-10-31). The shared zstack gate still needs the cross-repo change below.
 - Route selection: the zstack hook keeps the single set of controls. When Herdr is selected, it resolves the installed herdr-zstack companion instead of its legacy skill. A missing companion is reported as a capability gap. This needs a cross-repo change in agent-skills.
 - Proof: preflight in this terminal reports a supported native session. Preflight outside hc reports unavailable. In a fresh Claude Code and Codex session, the hook points at the herdr-zstack companion after selection.
 

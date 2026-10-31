@@ -5,7 +5,7 @@ Herdr-specific workflows and native UI for zstack. This repository owns integrat
 ## Available now
 
 - [Task & Evidence](mods/task-evidence/README.md): explicit task selection, read-only brief/artifacts/handoff, receipt snapshots, and separate ownership-unverified live activity.
-- [Execution contract](docs/execution-contract.md): native operation matrix, capability preflight, zstack compatibility, and single-worker ownership boundaries.
+- [Execution contract](docs/execution-contract.md): native operation matrix, capability preflight, zstack compatibility, and single-worker ownership boundaries. `node scripts/preflight.mjs` reports native-session detection and the capability matrix as read-only JSON.
 - [Task records and revision receipts](docs/task-record.md): shared schema, coordinator writer, local revision observation, and fail-closed acceptance checks.
 - [Installation](docs/installation.md): reproducible namespaced mod installation, personal layout recipe, and CI checks.
 - [Worker lifecycle](docs/worker-lifecycle.md): scoped single-worker execution and pause/pickup reconciliation, with [local pilot evidence](docs/validation.md#issue-3-single-worker-hc-pilot--2026-10-31) and [recovery proof limits](docs/validation.md#issue-4-pause-and-pickup-reconciliation--2026-10-31).
