@@ -1,0 +1,9 @@
+{
+  "name": "herdr-zstack",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "test": "node --test mods/task-evidence/*.test.mjs",
+    "check:mod": "herdr-app check mods/task-evidence"
+  }
+}

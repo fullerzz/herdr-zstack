@@ -1,0 +1,6 @@
+.DS_Store
+.agent-work/
+node_modules/
+mods/*/*.d.ts
+mods/*/jsconfig.json
+mods/*/*.error
