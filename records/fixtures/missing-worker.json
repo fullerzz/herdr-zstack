@@ -1,0 +1,22 @@
+{
+  "schemaVersion": 1,
+  "sequence": 1,
+  "taskId": "pilot-1",
+  "coordinator": "coordinator-1",
+  "machine": "local",
+  "checkout": "/work/pilot",
+  "owner": "worker-1",
+  "scope": "src/pilot.js",
+  "activity": "active",
+  "worker": null,
+  "revision": {
+    "commit": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+    "worktreeDigest": "clean"
+  },
+  "brief": "brief.md",
+  "handoff": "handoff.md",
+  "artifacts": [
+    "acceptance.md"
+  ],
+  "receipt": null
+}

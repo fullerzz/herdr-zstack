@@ -3,7 +3,7 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "test": "node --test mods/task-evidence/*.test.mjs",
+    "test": "node --test",
     "check:mod": "herdr-app check mods/task-evidence"
   }
 }

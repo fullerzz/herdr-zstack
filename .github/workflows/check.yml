@@ -1,0 +1,17 @@
+name: Checks
+on: [push, pull_request]
+permissions:
+  contents: read
+jobs:
+  portable:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - run: node --test
+      - run: git diff --check
+      - name: Generated host files must stay untracked
+        run: |
+          if git ls-files 'mods/**/*.d.ts' 'mods/**/jsconfig.json' 'mods/**/*.error' | grep .; then exit 1; fi
