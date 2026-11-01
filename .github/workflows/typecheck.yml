@@ -17,7 +17,9 @@ jobs:
         with:
           node-version: '24'
       - name: Install just and herdr-app
+        # The runner image's cask index can predate the herdr-app cask.
         run: |
+          brew update --quiet
           brew install just
           brew install --cask herdr-app
           herdr-app --version
