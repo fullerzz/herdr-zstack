@@ -5,9 +5,19 @@ import { setTimeout as delay } from 'node:timers/promises';
 import { validateRecord } from '../mods/task-evidence/task-record.js';
 import { validateBoard } from '../mods/task-evidence/board.js';
 
-export async function withFileLock(path, action) {
+export async function withFileLock(path, action, { waitMs = 0 } = {}) {
   const lockPath = `${path}.lock`;
-  const lock = await open(lockPath, 'wx', 0o600);
+  const deadline = performance.now() + waitMs;
+  let lock;
+  for (;;) {
+    try { lock = await open(lockPath, 'wx', 0o600); break; }
+    catch (error) {
+      if (error.code !== 'EEXIST' || waitMs === 0) throw error;
+      const remaining = deadline - performance.now();
+      if (remaining <= 0) throw new Error(`timed out waiting for ${lockPath}; inspect its owner before retrying`);
+      await delay(Math.min(25, remaining));
+    }
+  }
   try { return await action(); }
   finally {
     await lock.close();

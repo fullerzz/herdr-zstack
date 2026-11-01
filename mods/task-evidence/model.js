@@ -6,7 +6,7 @@ export function filesFor(props) {
   };
   return [file("Task notes", props.notes), file("Acceptance", props.acceptance),
     ...(Array.isArray(props.artifacts) ? props.artifacts.map(a => file(a.label || "Artifact", a.path)) : []),
-    file("Handoff", props.handoff)].filter(Boolean);
+    file("Handoff", props.handoff), file("Decisions", props.decisions)].filter(Boolean);
 }
 
 export function taskSpace(props, spaces) {
@@ -26,7 +26,7 @@ export function taskChoices(config) {
 }
 
 export function recordFiles(record) {
-  return filesFor({ folder: record.checkout, notes: record.brief, handoff: record.handoff,
+  return filesFor({ folder: record.checkout, notes: record.brief, handoff: record.handoff, decisions: record.decisions,
     artifacts: [...record.artifacts, ...(record.receipt?.evidence ?? [])].map(path => ({ label: path, path })) });
 }
 

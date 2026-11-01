@@ -5,6 +5,7 @@ import { filesFor, taskSpace, taskChoices, recordFiles, taskActivity } from "./m
 
 import { readMember, readRoster, rosterFacts, factKey } from "./roster.js";
 import { readBoard, boardKey, evidenceFolder, parentFolder } from "./board.js";
+import { parseDecisions, evidencePointers } from "./decisions.js";
 
 export default class TaskEvidence extends View {
   init(_props, cx) {
@@ -130,7 +131,7 @@ export default class TaskEvidence extends View {
         state = member.state;
       }
       if (this.closed || request !== this.taskRequest) return;
-      const shown = { taskId: this.members[this.memberIndex]?.taskId, path: this.files[this.selected]?.path };
+      const shown = { taskId: this.members[this.memberIndex]?.taskId, file: this.files[this.selected] };
       this.reading = false;
       this.roster = roster;
       this.members = members;
@@ -138,20 +139,21 @@ export default class TaskEvidence extends View {
       this.recordState = state;
       this.recordAt = new Date().toLocaleTimeString();
       this.factKey = factKey(rosterFacts({ runId: roster?.runId ?? null, members }, before, machine));
-      this.selectMember(cx, keep ? Math.max(0, members.findIndex(m => m.taskId === shown.taskId)) : 0, keep ? shown.path : null);
+      this.selectMember(cx, keep ? Math.max(0, members.findIndex(m => m.taskId === shown.taskId)) : 0, keep ? shown.file : null);
       cx.notify();
     });
   }
 
-  selectMember(cx, index, path = null) {
+  selectMember(cx, index, selectedFile = null) {
     this.memberIndex = index;
     this.record = this.members[index]?.record ?? null;
     const files = this.record ? recordFiles(this.record) : [];
-    const keep = path !== null && files.some(f => f.path === path);
+    const selected = selectedFile ? files.findIndex(f => f.path === selectedFile.path && f.label === selectedFile.label) : -1;
+    const keep = selected >= 0;
     this.files = files;
     // A tracked board task opens on its status file, which its coordinator updates.
     const status = this.tasks[this.taskIndex]?.board ? files.findIndex(f => f.label === "Handoff") : -1;
-    this.selected = keep ? files.findIndex(f => f.path === path) : Math.max(0, status);
+    this.selected = keep ? selected : Math.max(0, status);
     if (!keep) this.snapshot = null;
     if (this.record) this.load(cx, { keep });
   }
@@ -221,6 +223,20 @@ export default class TaskEvidence extends View {
       else if (this.snapshot?.text === null) body = "File not found. No evidence is available at this path.";
       else body = this.snapshot?.text || "This file is empty.";
     } else if (this.roster && !this.record) body = "The selected member has no readable record, so it has no evidence files.";
+    // A decision log renders as rows; text without the exact header stays raw.
+    const decisions = file?.label === "Decisions" && !this.loading && typeof this.snapshot?.text === "string" ? parseDecisions(this.snapshot.text) : null;
+    const select = index => (_event, cx) => { this.selected = index; this.load(cx); cx.notify(); };
+    const decisionRow = (row, index) => {
+      if (row.malformed) return div().text_color(t.dim).child(`Malformed row: ${row.raw}`);
+      return v_flex().id(`decision-${index}`).gap(2).px(8).py(5).rounded(5).bg(t.raised)
+        .child(div().text_size(10).text_color(t.dim).child(row.phase === "start" ? `── start · ${row.decision} · ${row.ts}` : `${row.ts} · ${row.phase}`))
+        .when(row.phase !== "start", el => el.child(div().font_semibold().child(row.decision)))
+        .child(div().text_color(t.muted).child(`Why: ${row.why}`))
+        .child(h_flex().flex_wrap().gap(4).child(div().text_color(t.dim).child("Evidence:"))
+          .children(evidencePointers(row.evidence, this.files).map(({ pointer, file: linked }, j) => linked >= 0 ?
+            action(`decision-${index}-evidence-${j}`, `${pointer} ↗`, select(linked)) : div().text_color(t.dim).child(pointer))))
+        .child(div().text_color(t.dim).child(`Result (reported): ${row.result}`));
+    };
     return v_flex().size_full().min_h(0).bg(t.surface).text_color(t.foreground).text_size(12).p(12).gap(9)
       .child(h_flex().flex_shrink_0().items_center().justify_between()
         .child(div().font_semibold().text_size(15).child("Task & Evidence"))
@@ -259,15 +275,16 @@ export default class TaskEvidence extends View {
             [div().text_color(t.muted).child(space ? "No agents reporting in this space." : "No unique linked space. Set a space ID to link activity.")]))
           .child(heading("DURABLE RECORD"))
           .child(div().text_color(t.dim).child("File contents are the record. Refresh to read changes."))
-          .child(v_flex().gap(3).children(this.files.map((f, index) => action(`file-${index}`, f.label, (_event, cx) => {
-            this.selected = index; this.load(cx); cx.notify();
-          }, index === this.selected))))
+          .child(v_flex().gap(3).children(this.files.map((f, index) => action(`file-${index}`, f.label, select(index), index === this.selected))))
           .when(!this.tasks.length && !this.config.acceptance, el => el.child(div().text_color(t.dim).child("No separate acceptance file configured; consult the task notes.")))
           .when(!this.tasks.length && !this.config.artifacts?.length, el => el.child(div().text_color(t.dim).child("No verification artifacts configured.")))
           .when(!this.tasks.length && !this.config.handoff, el => el.child(div().text_color(t.dim).child("No handoff file configured.")))
           .when(Boolean(file), el => el.child(div().text_size(10).text_color(t.muted).child(file.path)))
           .when(Boolean(this.snapshot?.at), el => el.child(div().text_size(10).text_color(t.dim).child(`Read at ${this.snapshot.at}`)))))
       .child(v_flex().id("record").flex_1().min_h(0).overflow_y_scrollbar()
-        .child(TextView.markdown(`record-${this.request}`, body)));
+        .when(Boolean(decisions), el => el.child(v_flex().gap(6)
+          .child(heading("DECISIONS — REPORTED BY THE COORDINATOR, NOT VERIFIED"))
+          .children(decisions?.length ? decisions.map(decisionRow) : [div().text_color(t.dim).child("No decisions logged yet.")])))
+        .when(!decisions, el => el.child(TextView.markdown(`record-${this.request}`, body))));
   }
 }
