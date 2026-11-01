@@ -1,6 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
+import { DECISION_HEADER, decisionCell } from "./decisions.js";
 
 const main = await readFile(new URL("./main.js", import.meta.url), "utf8");
 // Host modules become one stub; sibling modules load from disk, as the installer ships them.
@@ -502,4 +503,99 @@ test('remote board rosters never watch local index or member folders', async () 
   const p = await watchedRoster('server');
   try { assert.deepEqual(p.watches, []); }
   finally { await p.close(); }
+});
+
+test('a decision log renders reported rows whose listed evidence opens that file', async () => {
+  const log = ['ts\tphase\tdecision\twhy\tevidence\tresult',
+    '2026-11-01T00:00:00Z\tstart\trun t16\tnew session\tsession 6a3a\topen',
+    '2026-11-01T00:00:01Z\tlayout\tDropped props\tstale fallback\t/checks.log, commit 3a9f1c2\tgreen', 'bad row', ''].join('\n');
+  const p = await panel(async path => path === '/decisions.tsv' ? log : 'checks', { decisions: '/decisions.tsv' });
+  await p.callbacks.shift()(p.cx);
+  assert.deepEqual(p.instance.files.map(f => f.label), ['Task notes', 'Artifact', 'Decisions']);
+  byId(p.instance.render(p.cx), 'file-2').styles.on_click[0](undefined, p.cx);
+  await p.callbacks.shift()(p.cx);
+  const tree = p.instance.render(p.cx);
+  const lines = texts(byId(tree, 'record'));
+  assert.ok(lines.includes('DECISIONS — REPORTED BY THE COORDINATOR, NOT VERIFIED'));
+  assert.ok(lines.includes('── start · run t16 · 2026-11-01T00:00:00Z'));
+  assert.ok(lines.includes('Why: new session'));
+  assert.ok(lines.includes('Result (reported): open'));
+  assert.ok(lines.includes('session 6a3a'));
+  assert.ok(lines.includes('Result (reported): green'));
+  assert.ok(lines.includes('commit 3a9f1c2'));
+  assert.ok(lines.includes('Malformed row: bad row'));
+  byId(tree, 'decision-1-evidence-0').styles.on_click[0](undefined, p.cx);
+  assert.equal(p.instance.selected, 1);
+  await p.callbacks.shift()(p.cx);
+  assert.equal(p.instance.snapshot.text, 'checks');
+  assert.ok(texts(byId(p.instance.render(p.cx), 'record')).includes('checks'));
+  p.cleanup();
+});
+
+test('a Decisions file without the log header stays raw text', async () => {
+  const p = await panel(async path => path === '/decisions.tsv' ? '# notes' : 'n', { decisions: '/decisions.tsv' });
+  await p.callbacks.shift()(p.cx);
+  p.instance.selected = 2; p.instance.load(p.cx);
+  await p.callbacks.shift()(p.cx);
+  assert.ok(texts(byId(p.instance.render(p.cx), 'record')).includes('# notes'));
+  p.cleanup();
+});
+
+test('watch refresh preserves the selected view when Decisions is also an artifact', async () => {
+  const path = '.herdr-tasks/b/decisions.tsv';
+  const log = decision => `${DECISION_HEADER}\ntime\tfix\t${decision}\twhy\te\tresult\n`;
+  const record = { ...JSON.parse(boardTask('b')), artifacts: [path], decisions: path };
+  const p = await boardPanel({ [boardPath]: boardFile(['b']), [boardRecord('b')]: JSON.stringify(record), [`/repo/${path}`]: log('First') });
+  try {
+    p.callbacks.shift()(p.cx);
+    await p.callbacks.shift()(p.cx);
+    await p.callbacks.shift()(p.cx);
+    for (const label of ['Decisions', path]) {
+      const index = p.instance.files.findIndex(file => file.label === label);
+      byId(p.instance.render(p.cx), `file-${index}`).styles.on_click[0](undefined, p.cx);
+      await p.callbacks.shift()(p.cx);
+      p.entries[`/repo/${path}`] = log('Second');
+      p.watches.findLast(w => w.path === '/repo/.herdr-tasks').resolve([`/repo/${path}`]);
+      await flush();
+      await p.callbacks.shift()(p.cx);
+      await p.callbacks.shift()(p.cx);
+      assert.equal(p.instance.files[p.instance.selected].label, label);
+      const lines = texts(byId(p.instance.render(p.cx), 'record'));
+      assert.ok(lines.includes(label === 'Decisions' ? 'Second' : log('Second')));
+    }
+  } finally { await p.close(); }
+});
+
+test('decision evidence keeps spaced and comma filenames and clicks only exact listed targets', async () => {
+  const reads = [];
+  const evidence = '/a  b.txt, /a,b.txt, comma,label, /a,b.txt, /abc, /a  b.txt.bak, /unlisted';
+  const log = `${DECISION_HEADER}\n${['time', 'fix', '  =reported', 'why', evidence, 'ok'].map(decisionCell).join('\t')}\n`;
+  const p = await panel(async path => { reads.push(path); return path === '/decisions.tsv' ? log : path; }, {
+    decisions: '/decisions.tsv', artifacts: [
+      { label: 'prefix', path: '/a' },
+      { label: 'one space', path: '/a b.txt' },
+      { label: 'two spaces', path: '/a  b.txt' },
+      { label: 'comma,label', path: '/a,b.txt' },
+    ],
+  });
+  try {
+    await p.callbacks.shift()(p.cx);
+    p.instance.selected = p.instance.files.findIndex(file => file.label === 'Decisions');
+    p.instance.load(p.cx); await p.callbacks.shift()(p.cx);
+    const tree = p.instance.render(p.cx);
+    const lines = texts(byId(tree, 'record'));
+    for (const text of ['  =reported', '/a  b.txt ↗', '/a,b.txt ↗', 'comma,label ↗', '/abc', '/a  b.txt.bak', '/unlisted']) {
+      assert.ok(lines.includes(text), text);
+    }
+    assert.equal(lines.filter(text => text === '/a,b.txt ↗').length, 2, 'duplicates stay visible');
+    for (const index of [4, 5, 6]) assert.equal(byId(tree, `decision-0-evidence-${index}`), null, 'unlisted lookalikes have no click target');
+    const targets = ['/a  b.txt', '/a,b.txt', '/a,b.txt', '/a,b.txt'];
+    for (const [index, target] of targets.entries()) {
+      byId(tree, `decision-0-evidence-${index}`).styles.on_click[0](undefined, p.cx);
+      assert.equal(p.instance.files[p.instance.selected].path, target);
+      await p.callbacks.shift()(p.cx);
+      assert.equal(p.instance.snapshot.text, target);
+    }
+    assert.deepEqual(reads, ['/notes.md', '/decisions.tsv', ...targets], 'no prefix, collapsed-space or unlisted path is read');
+  } finally { p.cleanup(); }
 });
