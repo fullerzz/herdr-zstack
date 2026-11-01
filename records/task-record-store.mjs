@@ -1,6 +1,9 @@
-import { open, readFile, rename, unlink } from 'node:fs/promises';
+import { mkdir, open, readFile, rename, unlink } from 'node:fs/promises';
 import { randomUUID } from 'node:crypto';
+import { dirname } from 'node:path';
+import { setTimeout as delay } from 'node:timers/promises';
 import { validateRecord } from '../mods/task-evidence/task-record.js';
+import { validateBoard } from '../mods/task-evidence/board.js';
 
 export async function withFileLock(path, action) {
   const lockPath = `${path}.lock`;
@@ -12,27 +15,32 @@ export async function withFileLock(path, action) {
   }
 }
 
+// Readers see the old or the new complete file, never a partial write.
+export async function writeAtomic(path, contents) {
+  const temporary = `${path}.${randomUUID()}.tmp`;
+  try {
+    const file = await open(temporary, 'wx', 0o600);
+    try { await file.writeFile(contents); await file.sync(); }
+    finally { await file.close(); }
+    await rename(temporary, path);
+  } finally {
+    await unlink(temporary).catch(error => { if (error.code !== 'ENOENT') throw error; });
+  }
+}
+
 // One coordinator owns each file. The lock rejects concurrent writers; sequence rejects stale updates.
 async function writeLocked(path, value, { writer, expectedSequence, validate, identity }) {
   const errors = validate(value);
   if (errors.length) throw new Error(errors.join('; '));
   if (writer !== value.coordinator) throw new Error('only the coordinator may write');
   return withFileLock(path, async () => {
-    const temporary = `${path}.${randomUUID()}.tmp`;
-    try {
-      let previous;
-      try { previous = JSON.parse(await readFile(path, 'utf8')); }
-      catch (error) { if (error.code !== 'ENOENT') throw error; }
-      if (previous !== undefined && validate(previous).length) throw new Error('existing record is malformed');
-      if ((previous?.sequence ?? 0) !== expectedSequence || value.sequence !== expectedSequence + 1) throw new Error('stale sequence');
-      if (previous && identity.some(key => previous[key] !== value[key])) throw new Error('record identity cannot change');
-      const file = await open(temporary, 'wx', 0o600);
-      try { await file.writeFile(`${JSON.stringify(value, null, 2)}\n`); await file.sync(); }
-      finally { await file.close(); }
-      await rename(temporary, path);
-    } finally {
-      await unlink(temporary).catch(error => { if (error.code !== 'ENOENT') throw error; });
-    }
+    let previous;
+    try { previous = JSON.parse(await readFile(path, 'utf8')); }
+    catch (error) { if (error.code !== 'ENOENT') throw error; }
+    if (previous !== undefined && validate(previous).length) throw new Error('existing record is malformed');
+    if ((previous?.sequence ?? 0) !== expectedSequence || value.sequence !== expectedSequence + 1) throw new Error('stale sequence');
+    if (previous && identity.some(key => previous[key] !== value[key])) throw new Error('record identity cannot change');
+    await writeAtomic(path, `${JSON.stringify(value, null, 2)}\n`);
   });
 }
 
@@ -46,6 +54,30 @@ export async function writeRun(path, run, { writer, expectedSequence = 0 }) {
   const { validateRun } = await import('../workflows/roster.mjs');
   await writeLocked(path, run, { writer, expectedSequence, validate: validateRun,
     identity: ['runId', 'coordinator', 'machine', 'checkout'] });
+}
+
+// Many coordinators share one board, so each update rereads it under the lock
+// and applies `change(tasks)`. A busy lock is retried briefly, never stolen.
+export async function updateBoard(path, change, { attempts = 40 } = {}) {
+  await mkdir(dirname(path), { recursive: true });
+  for (let attempt = 1; ; attempt++) {
+    try {
+      return await withFileLock(path, async () => {
+        let previous;
+        try { previous = JSON.parse(await readFile(path, 'utf8')); }
+        catch (error) { if (error.code !== 'ENOENT') throw error; }
+        if (previous !== undefined && validateBoard(previous).length) throw new Error('existing board is malformed');
+        const board = { schemaVersion: 1, sequence: (previous?.sequence ?? 0) + 1, tasks: change(previous?.tasks ?? []) };
+        const errors = validateBoard(board);
+        if (errors.length) throw new Error(errors.join('; '));
+        await writeAtomic(path, `${JSON.stringify(board, null, 2)}\n`);
+        return board;
+      });
+    } catch (error) {
+      if (error.code !== 'EEXIST' || attempt >= attempts) throw error;
+      await delay(25);
+    }
+  }
 }
 
 // Freeze task writers before observing; git does not provide an atomic worktree snapshot.

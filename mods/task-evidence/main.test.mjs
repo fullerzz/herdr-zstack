@@ -9,10 +9,11 @@ const siblingImport = /from "\.\/([\w-]+\.js)";/g;
 async function panel(read, props = {}) {
   const callbacks = [];
   const key = `taskEvidenceTest${Math.random()}`;
-  globalThis[key] = { read, spaces: [], terminals: [], props: { notes: "/notes.md", artifacts: [{ path: "/checks.log" }], ...props } };
+  globalThis[key] = { read, spaces: [], terminals: [], watch: () => new Promise(() => {}), props: { notes: "/notes.md", artifacts: [{ path: "/checks.log" }], ...props } };
   const host = `const h = globalThis[${JSON.stringify(key)}];
     export const View = class {}; export const readTextFile = (...args) => h.read(...args); export const spaces = () => h.spaces; export const props = () => h.props;
     export const theme = () => ({}); export const agents = () => []; export const terminals = () => h.terminals; export const run = () => null;
+    export const watchFolder = path => h.watch(path);
     export const div = () => { const node = {items: [], styles: {}}; let builder;
       builder = new Proxy(node, {get(target, name) {
         if (name in target) return target[name];
@@ -261,6 +262,173 @@ test('facts changing during a reread trigger another; manual refresh clears firs
 
 test('panel host surface stays read-only', () => {
   const imported = [...main.matchAll(/^import \{([^}]*)\} from "herdr";$/gm)].flatMap(m => m[1].split(',').map(name => name.trim()));
-  assert.deepEqual(imported.sort(), ['agents', 'props', 'readTextFile', 'run', 'spaces', 'terminals', 'theme']);
+  assert.deepEqual(imported.sort(), ['agents', 'props', 'readTextFile', 'run', 'spaces', 'terminals', 'theme', 'watchFolder']);
   assert.deepEqual([...main.matchAll(/run\("([^"]+)"/g)].map(m => m[1]), ['agent.focus'], 'navigation is the only command');
+});
+
+const boardPath = '/state/herdr-zstack/board.json';
+const boardRecord = id => `/repo/.herdr-tasks/${id}/task.json`;
+const boardFile = ids => JSON.stringify({schemaVersion: 1, sequence: ids.length + 1, tasks: ids.map(id => ({label: `Task ${id}`, record: boardRecord(id), machine: null}))});
+const boardTask = id => JSON.stringify({...active, taskId: id, checkout: '/repo', brief: `.herdr-tasks/${id}/brief.md`, handoff: `.herdr-tasks/${id}/status.md`, artifacts: []});
+const flush = () => new Promise(resolve => setImmediate(resolve));
+// Watch loops run until closed, so tests start them and flush instead of awaiting them.
+async function boardPanel(entries, props = {}) {
+  const reads = [], watches = [];
+  const p = await panel(async path => { reads.push(path); return entries[path] ?? null; }, {board: boardPath, ...props});
+  p.host.watch = path => new Promise(resolve => watches.push({path, resolve}));
+  p.callbacks.shift()(p.cx);  // board loop
+  p.callbacks.shift();        // initial manual-mode read, superseded once the board lists tasks
+  await flush();
+  return {...p, reads, watches, entries, close: async () => { p.instance.close(); watches.forEach(w => w.resolve([])); await flush(); p.cleanup(); }};
+}
+
+test('board tasks appear after the board is read and select the newest entry', async () => {
+  const p = await boardPanel({[boardPath]: boardFile(['b', 'a']), [boardRecord('b')]: boardTask('b')});
+  assert.deepEqual(p.instance.tasks.map(t => t.label), ['Task b', 'Task a']);
+  assert.ok(texts(p.instance.render(p.cx)).some(line => /Board: 2 tracked tasks/.test(line)));
+  p.callbacks.shift()(p.cx);  // evidence-folder watch loop
+  await p.callbacks.shift()(p.cx);
+  assert.equal(p.instance.record.taskId, 'b');
+  assert.equal(p.instance.files[p.instance.selected].label, 'Handoff', 'a board task opens on its status');
+  p.host.terminals = [{address: 't16', labels: {task: 'b'}, state: 'live', status: 'working'}];
+  const lines = texts(p.instance.render(p.cx));
+  assert.ok(lines.includes('TERMINALS LABELLED FOR THIS TASK — OWNERSHIP UNVERIFIED'));
+  assert.ok(lines.includes('t16 · live · working'));
+  await flush();
+  assert.deepEqual(p.watches.map(w => w.path), ['/state/herdr-zstack', '/repo/.herdr-tasks']);
+  await p.close();
+});
+
+test('a change in the task evidence folder rereads the record and status, keeping them visible', async () => {
+  const p = await boardPanel({[boardPath]: boardFile(['b']), [boardRecord('b')]: boardTask('b'), '/repo/.herdr-tasks/b/brief.md': 'goal'});
+  p.callbacks.shift()(p.cx);                 // evidence-folder watch loop
+  await p.callbacks.shift()(p.cx);           // record
+  p.entries['/repo/.herdr-tasks/b/status.md'] = '**Now:** testing';
+  await p.callbacks.shift()(p.cx);           // status
+  assert.equal(p.watches.at(-1).path, '/repo/.herdr-tasks');
+  assert.equal(p.instance.snapshot.text, '**Now:** testing');
+  p.entries['/repo/.herdr-tasks/b/status.md'] = '**Now:** verified';
+  p.entries[boardRecord('b')] = JSON.stringify({...JSON.parse(boardTask('b')), sequence: 2, activity: 'completed'});
+  const shown = p.instance.snapshot;
+  p.watches.at(-1).resolve(['/repo/.herdr-tasks/b/status.md']);
+  await flush();
+  assert.equal(p.callbacks.length, 1, 'one record reread per change');
+  assert.equal(p.instance.snapshot, shown, 'evidence stays visible during the reread');
+  await p.callbacks.shift()(p.cx);
+  assert.equal(p.instance.record.activity, 'completed');
+  assert.equal(p.instance.selected, 1);
+  await p.callbacks.shift()(p.cx);
+  assert.equal(p.instance.snapshot.text, '**Now:** verified');
+  assert.equal(p.watches.length, 3, 'the loop waits again');
+  await p.close();
+});
+
+test('board updates keep the selected task and fall back when it is removed', async () => {
+  const p = await boardPanel({[boardPath]: boardFile(['b', 'a']), [boardRecord('a')]: boardTask('a'), [boardRecord('b')]: boardTask('b')},
+    {tasks: [{label: 'Pinned', record: '/pinned/.herdr-tasks/p/task.json'}]});
+  assert.deepEqual(p.instance.tasks.map(t => t.label), ['Pinned', 'Task b', 'Task a'], 'layout tasks stay first');
+  p.instance.taskIndex = 2;
+  p.callbacks.length = 0;
+  const boardWatch = () => p.watches.findLast(w => w.path === '/state/herdr-zstack');
+  p.entries[boardPath] = boardFile(['c', 'b', 'a']);
+  boardWatch().resolve([boardPath]);
+  await flush();
+  assert.equal(p.instance.tasks[p.instance.taskIndex].label, 'Task a', 'selection follows its entry');
+  assert.equal(p.callbacks.length, 0, 'a kept selection is not reread');
+  p.entries[boardPath] = boardFile(['c']);
+  boardWatch().resolve([boardPath]);
+  await flush();
+  assert.equal(p.instance.taskIndex, 0);
+  assert.equal(p.instance.recordState, 'Reading task record…');
+  await p.close();
+});
+
+test('a selected board duplicate keeps its identity and continues refreshing status after board updates', async () => {
+  const status = '/repo/.herdr-tasks/a/status.md';
+  const p = await boardPanel({[boardPath]: boardFile(['a']), [boardRecord('a')]: boardTask('a'), [status]: 'Initial status'},
+    {tasks: [{label: 'Pinned a', record: boardRecord('a')}]});
+  try {
+    assert.deepEqual(p.instance.tasks.map(t => t.label), ['Pinned a', 'Task a']);
+    assert.equal(p.instance.taskIndex, 0, 'layout entry keeps initial precedence');
+    byId(p.instance.render(p.cx), 'task-1').styles.on_click[0](undefined, p.cx);
+    p.callbacks.shift()(p.cx);               // evidence-folder watch loop
+    await p.callbacks.shift()(p.cx);         // record
+    await p.callbacks.shift()(p.cx);         // status
+    assert.equal(p.instance.snapshot.text, 'Initial status');
+    const watch = path => p.watches.findLast(w => w.path === path);
+
+    for (const [ids, text] of [[['c', 'a'], 'Testing'], [['a', 'c'], 'Verified']]) {
+      p.entries[boardPath] = boardFile(ids);
+      watch('/state/herdr-zstack').resolve([boardPath]);
+      await flush();
+      assert.equal(p.instance.tasks[p.instance.taskIndex].label, 'Task a', 'selection follows the chosen board entry');
+      assert.equal(p.instance.files[p.instance.selected].path, status);
+      const shown = p.instance.snapshot;
+      p.entries[status] = text;
+      watch('/repo/.herdr-tasks').resolve([status]);
+      await flush();
+      assert.equal(p.instance.snapshot, shown, 'current evidence stays visible until reread');
+      await p.callbacks.shift()(p.cx);       // record
+      await p.callbacks.shift()(p.cx);       // status
+      assert.equal(p.instance.snapshot.text, text);
+      assert.notEqual(p.instance.taskWatch, null);
+    }
+    assert.equal(p.watches.filter(w => w.path === '/repo/.herdr-tasks').length, 3, 'watch re-arms after both changes');
+  } finally { await p.close(); }
+});
+
+test('a selected layout duplicate retains precedence through board reorder and removal', async () => {
+  const p = await boardPanel({[boardPath]: boardFile(['a'])}, {tasks: [{label: 'Pinned a', record: boardRecord('a')}]});
+  try {
+    for (const ids of [['c', 'a'], ['c']]) {
+      p.entries[boardPath] = boardFile(ids);
+      p.watches.findLast(w => w.path === '/state/herdr-zstack').resolve([boardPath]);
+      await flush();
+      assert.equal(p.instance.taskIndex, 0);
+      assert.equal(p.instance.tasks[0].label, 'Pinned a');
+      assert.equal(p.callbacks.length, 0, 'retaining a layout selection does not reload it');
+    }
+  } finally { await p.close(); }
+});
+
+test('an unwatchable board says so, and Refresh retries it', async () => {
+  const p = await panel(async () => null, {board: boardPath});
+  p.host.watch = async () => { throw new Error('no such folder'); };
+  await p.callbacks.shift()(p.cx);
+  assert.match(p.instance.boardState, /no tracked tasks yet.*Not watching the board.*no such folder/);
+  p.callbacks.length = 0;
+  byId(p.instance.render(p.cx), 'refresh').styles.on_click[0](undefined, p.cx);
+  assert.equal(p.callbacks.length, 2, 'board read plus manual file read');
+  p.cleanup();
+});
+
+test('a missing board folder is awaited from its parent, so the first task appears without Refresh', async () => {
+  const entries = {}, watches = [];
+  const p = await panel(async path => entries[path] ?? null, {board: boardPath});
+  p.host.watch = path => path === '/state/herdr-zstack' ? Promise.reject(new Error('no such folder')) : new Promise(resolve => watches.push({path, resolve}));
+  p.callbacks.shift()(p.cx); p.callbacks.shift(); await flush();
+  assert.deepEqual(watches.map(w => w.path), ['/state']);
+  entries[boardPath] = boardFile(['a']);
+  watches[0].resolve(['/state/herdr-zstack/board.json']);
+  await flush();
+  assert.deepEqual(p.instance.tasks.map(t => t.label), ['Task a']);
+  p.instance.close(); watches.forEach(w => w.resolve([])); await flush(); p.cleanup();
+});
+
+test('an emptied board returns to manual mode and discards task reads still in flight', async () => {
+  const p = await boardPanel({[boardPath]: boardFile(['a']), [boardRecord('a')]: boardTask('a')});
+  p.callbacks.shift()(p.cx);                 // evidence-folder watch loop
+  await p.callbacks.shift()(p.cx);           // record
+  await p.callbacks.shift()(p.cx);           // status
+  p.instance.loadTask(p.cx, {keep: true});
+  const late = p.callbacks.shift();          // a reread still in flight
+  delete p.entries[boardRecord('a')];
+  p.entries[boardPath] = boardFile([]);
+  p.watches.find(w => w.path === '/state/herdr-zstack').resolve([boardPath]);
+  await flush();
+  await late(p.cx);
+  assert.deepEqual(p.instance.tasks, []);
+  assert.equal(p.instance.recordState, null);
+  assert.equal(p.instance.files[0].path, '/notes.md', 'manual files return');
+  await p.close();
 });

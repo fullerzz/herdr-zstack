@@ -1,14 +1,16 @@
 import { View, div } from "gpui-kit";
 import { v_flex, h_flex, TextView } from "gpui-base";
-import { agents, spaces, terminals, theme, readTextFile, run, props } from "herdr";
+import { agents, spaces, terminals, theme, readTextFile, run, props, watchFolder } from "herdr";
 import { filesFor, taskSpace, taskChoices, recordFiles, taskActivity } from "./model.js";
 
 import { readMember, readRoster, rosterFacts, factKey } from "./roster.js";
+import { readBoard, boardKey, evidenceFolder, parentFolder } from "./board.js";
 
 export default class TaskEvidence extends View {
   init(_props, cx) {
     this.config = props() ?? {};
-    this.tasks = taskChoices(this.config);
+    this.configured = taskChoices(this.config);
+    this.tasks = this.configured;
     this.taskIndex = 0;
     this.roster = null;
     this.members = [];
@@ -19,8 +21,77 @@ export default class TaskEvidence extends View {
     this.selected = 0;
     this.snapshot = null;
     this.loading = false;
+    if (typeof this.config.board === "string" && this.config.board.startsWith("/")) this.watchBoard(cx);
     if (this.tasks.length) this.loadTask(cx);
     else this.load(cx);
+  }
+
+  close() { this.closed = true; this.boardWatch = this.taskWatch = null; }
+
+  // Reread the board whenever its folder changes. Board entries follow the
+  // layout's own tasks; a selection survives while its entry remains.
+  watchBoard(cx) {
+    const token = this.boardWatch = {};
+    cx.spawn(async cx => {
+      for (;;) {
+        const { tasks, state } = await readBoard(readTextFile, this.config.board);
+        if (this.closed || this.boardWatch !== token) return;
+        this.boardState = state;
+        this.applyBoard(cx, tasks);
+        cx.notify();
+        // Before the first task creates the board folder, watch its parent so
+        // that first task still appears without a Refresh.
+        const folder = parentFolder(this.config.board);
+        try { await watchFolder(folder).catch(() => watchFolder(parentFolder(folder))); }
+        catch (error) {
+          if (this.boardWatch !== token) return;
+          this.boardWatch = null;
+          this.boardState = `${state} Not watching the board (${String(error)}); Refresh rereads it.`;
+          cx.notify();
+          return;
+        }
+        if (this.closed || this.boardWatch !== token) return;
+      }
+    });
+  }
+
+  applyBoard(cx, boardTasks) {
+    const next = [...this.configured, ...boardTasks];
+    if (JSON.stringify(next) === JSON.stringify(this.tasks)) return;
+    const current = this.tasks[this.taskIndex];
+    this.tasks = next;
+    // A layout entry and a board entry may point to the same record. Keep the
+    // chosen source: board entries own evidence watching and open on status.
+    const index = current ? next.findIndex(task => Boolean(task.board) === Boolean(current.board) && boardKey(task) === boardKey(current)) : -1;
+    if (index >= 0) { this.taskIndex = index; return; }
+    this.taskIndex = 0;
+    if (next.length) this.loadTask(cx);
+    else {
+      // Back to manual mode: discard any task read still in flight.
+      this.taskRequest = (this.taskRequest ?? 0) + 1;
+      Object.assign(this, { taskWatch: null, watchKey: undefined, reading: false, factKey: undefined, roster: null, members: [],
+        memberIndex: 0, record: null, recordState: null, recordAt: null, files: filesFor(this.config), selected: 0 });
+      this.load(cx);
+    }
+  }
+
+  // Board tasks on this computer reread when their evidence folder changes.
+  watchTask(cx, choice) {
+    const folder = choice.board && !choice.machine ? evidenceFolder(choice) : null;
+    const key = folder && boardKey(choice);
+    if (key === this.watchKey) return;
+    this.watchKey = key;
+    const token = this.taskWatch = folder ? {} : null;
+    if (!folder) return;
+    cx.spawn(async cx => {
+      for (;;) {
+        try { await watchFolder(folder); }
+        catch { if (this.taskWatch === token) { this.taskWatch = null; this.watchKey = undefined; } return; }
+        if (this.closed || this.taskWatch !== token) return;
+        this.loadTask(cx, { keep: true });
+        cx.notify();
+      }
+    });
   }
 
   // Manual refresh and task selection clear evidence first. A fact-driven
@@ -28,6 +99,7 @@ export default class TaskEvidence extends View {
   loadTask(cx, { keep = false } = {}) {
     const choice = this.tasks[this.taskIndex];
     const machine = choice.machine ?? null;
+    this.watchTask(cx, choice);
     const request = this.taskRequest = (this.taskRequest ?? 0) + 1;
     this.reading = true;
     if (!keep) {
@@ -65,7 +137,9 @@ export default class TaskEvidence extends View {
     const files = this.record ? recordFiles(this.record) : [];
     const keep = path !== null && files.some(f => f.path === path);
     this.files = files;
-    this.selected = keep ? files.findIndex(f => f.path === path) : 0;
+    // A tracked board task opens on its status file, which its coordinator updates.
+    const status = this.tasks[this.taskIndex]?.board ? files.findIndex(f => f.label === "Handoff") : -1;
+    this.selected = keep ? files.findIndex(f => f.path === path) : Math.max(0, status);
     if (!keep) this.snapshot = null;
     if (this.record) this.load(cx, { keep });
   }
@@ -138,10 +212,14 @@ export default class TaskEvidence extends View {
     return v_flex().size_full().min_h(0).bg(t.surface).text_color(t.foreground).text_size(12).p(12).gap(9)
       .child(h_flex().flex_shrink_0().items_center().justify_between()
         .child(div().font_semibold().text_size(15).child("Task & Evidence"))
-        .child(action("refresh", "Refresh", (_event, cx) => { this.tasks.length ? this.loadTask(cx) : this.load(cx); cx.notify(); })))
+        .child(action("refresh", "Refresh", (_event, cx) => {
+          if (this.config.board?.startsWith?.("/") && !this.boardWatch) this.watchBoard(cx);
+          this.tasks.length ? this.loadTask(cx) : this.load(cx); cx.notify();
+        })))
       .child(v_flex().id("metadata").flex_1().min_h(0).overflow_y_scrollbar()
         .child(v_flex().flex_shrink_0().gap(9)
           .child(div().text_color(t.muted).child(this.config.title || this.config.folder || "No task configured"))
+          .when(Boolean(this.boardState), el => el.child(div().text_color(t.dim).child(this.boardState)))
           .child(v_flex().gap(3).children(this.tasks.map((task, index) => action(`task-${index}`, task.label || task.record || task.run, (_event, cx) => {
             this.taskIndex = index; this.loadTask(cx); cx.notify();
           }, index === this.taskIndex))))
@@ -157,6 +235,9 @@ export default class TaskEvidence extends View {
           .when(Boolean(this.record), el => el.child(div().text_color(t.dim).child(this.record ? `${this.record.taskId} · ${this.record.machine} · ${this.record.activity} (reported)` : "")))
           .when(Boolean(this.record?.receipt), el => el.child(div().text_color(t.dim).child(this.record?.receipt ? `RECEIPT SNAPSHOT: ${this.record.receipt.decision} · ${this.record.receipt.revision.commit} · ${this.record.receipt.revision.worktreeDigest}` : "")))
           .when(Boolean(this.recordAt), el => el.child(div().text_size(10).text_color(t.dim).child(`Record read at ${this.recordAt}`)))
+          .when(!this.roster && Boolean(facts?.members[0]?.terminals.length), el => el
+            .child(heading("TERMINALS LABELLED FOR THIS TASK — OWNERSHIP UNVERIFIED"))
+            .child(v_flex().gap(2).children((facts?.members[0]?.terminals ?? []).map(term => div().text_size(11).text_color(t.muted).child(terminalLine(term))))))
           .when(Boolean(this.record?.worker), el => el.child(TextView.markdown("worker-binding", this.record?.worker ? `Saved worker binding (unconfirmed):\n\n- Core: ${this.record.worker.core}\n- Terminal: ${this.record.worker.terminal}\n- Occupant: ${this.record.worker.occupant}` : "")))
           .child(heading("LIVE ACTIVITY — OWNERSHIP UNVERIFIED"))
           .child(div().text_color(t.dim).child(activity.reason))

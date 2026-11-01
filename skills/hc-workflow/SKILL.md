@@ -47,6 +47,18 @@ for `--outlive-parent` and `--keep`, and core-restart recovery.
 2. Native session. Run `node scripts/preflight.mjs` from this repository. It must report `session.status: supported`. `HERDR_ENV` is diagnostic only. If preflight fails, report the capability gap. Do not dispatch, and never fall back to legacy `herdr pane` / `herdr agent` commands.
 3. Budget. Count native and hc workers together against the host limit. A roster holds 1–3 workers. One worker is the [single-worker](../single-worker/SKILL.md) case.
 
+## Track the task
+
+While z-mode is active and Herdr is selected, track every task beyond a one-reply answer on the Task & Evidence board. This applies to direct work and delegated work alike. The user's selection of both modes authorizes these writes and nothing else: the coordinator's own `.herdr-tasks/<task>/` files and its board entry. Resolve `TASK_CLI` to `scripts/task.mjs` two directories above this file's real path. Run it from the task's checkout, which defaults `--checkout` to the Git root.
+
+1. When you restate the goal, run `node "$TASK_CLI" start --task <id> --scope "<scope>" --goal "<restated goal>"`. Then run the `hc label` command it prints, so the panel lists your terminal's live status.
+2. At each phase change, run `node "$TASK_CLI" note --task <id> "<one-line status>"`. Use the same one-line status you give the user. Write the next safe action before a pause or a wait for the user.
+3. Name each evidence file as you produce it: `node "$TASK_CLI" artifact --task <id> <path>`.
+4. When the task ends, run `node "$TASK_CLI" finish --task <id> "<outcome>"`. A finished task is reported activity only. Do not write a receipt for your own work.
+5. For a roster, also add the run index after `writeRun`: `node "$TASK_CLI" board add --run <run.json> --label "<run>"`.
+
+The CLI refuses writers other than the recorded coordinator, which is `$HC_TERMINAL_ID` by default. A new session starts a new task ID and names the earlier task in its brief. Workers never run these commands. A failed tracking write is reported once and does not block the task. The panel finds the board only when the layout's Task & Evidence block sets a `board` prop; see the [mod README](../../mods/task-evidence/README.md#tracked-tasks).
+
 ## Roster
 
 Each worker is its own schema 1 task record with its own binding, revision and receipt. The coordinator owns `.herdr-tasks/<run-id>/run.json`, which lists the members and each one's exclusive writes. `validateRun` in `workflows/roster.mjs` refuses these rosters:
