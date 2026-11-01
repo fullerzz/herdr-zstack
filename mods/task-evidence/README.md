@@ -32,7 +32,7 @@ Live activity is shown only for the explicit `space`, or one unique space matchi
 
 Manual mode remains available without `tasks`/`record`: configure `folder`, `notes`, optional `acceptance`, `handoff`, and `artifacts: [{label, path}]`. Paths are absolute or relative to an absolute folder. An unresolved explicit space without an explicit machine refuses manual reads. Markdown is displayed using the native read-only TextView.
 
-Run `node --test mods/task-evidence/*.test.mjs` and `herdr-app check mods/task-evidence`. The checker covers initial rendering only; live async navigation and refresh still need inspection. `place: none` avoids automatically changing a layout on installation.
+Run `node --test mods/task-evidence/*.test.mjs`, `herdr-app check mods/task-evidence`, and `just check`. The type check reads the JSDoc types for records, rosters, boards, and panel props. The checker covers initial rendering only; live async navigation and refresh still need inspection. `place: none` avoids automatically changing a layout on installation.
 
 ## Rosters
 

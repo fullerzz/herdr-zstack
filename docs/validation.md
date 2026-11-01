@@ -1306,3 +1306,11 @@ The coordinator inspected both changes after freezing the workers. `node --test`
 The panel now watches each local board roster member's evidence folder as well as the index folder. Subscriptions are deduplicated and reconciled as membership changes; notifications from removed folders and previous selections are ignored. Remote rosters remain unwatched locally.
 
 After freezing the `gpt-6.1-sol` worker, the coordinator reviewed the patch and ran `node --test`: all 120 tests passed (exit 0). The three added harness tests cover record/status refresh across checkouts with unchanged terminal facts, selection retention, membership changes, shared folders, missing records, stale notifications and remote exclusion. Fixtures use CLI-shaped `.herdr-tasks/<task-id>/status.md` paths. `herdr-app check mods/task-evidence` passed with native service access (exit 0), and `git diff --check` passed. The watcher is stubbed in the harness; this pass did not install the runtime or inspect live GPUI behavior.
+
+### JSDoc types and `just check` — 2026-11-01
+
+The Task & Evidence mod now declares its shared data as JSDoc typedefs: `TaskRecord` and its parts in `task-record.js`, `RunIndex`, `ReadText` and the roster facts in `roster.js`, `Board` in `board.js`, and `PanelConfig`, `TaskChoice` and `EvidenceFile` in `model.js`. The view in `main.js` types its state and handlers against `gpui-kit` and `herdr`. A committed `tsconfig.json` mirrors the generated mod `jsconfig.json`. `just check` regenerates the gitignored declarations with `herdr-app types` and runs TypeScript 7.0.2 through `npx`.
+
+Before the change, the same config reported 151 errors. After it, `just check` exited 0. A planted wrong argument (`recordFiles(this.memberIndex)`) made it exit 1 with TS2345, and the plant was reverted. `node --test mods/task-evidence/*.test.mjs` passed 51 tests, and `herdr-app check mods/task-evidence` and `git diff --check` passed.
+
+Limits: the edits add only comments, casts and split `let` declarations, with no runtime behavior change, so the running UI was not re-inspected. Test files, `mods/task-evidence-tabs`, `scripts/`, `records/` and `workflows/` are not type-checked. `skipLibCheck` skips the generated host declarations, which have their own errors under this config. The theme colors are cast to `Color` because `theme()` is declared as plain strings.
