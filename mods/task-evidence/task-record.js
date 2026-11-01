@@ -18,6 +18,7 @@ export function validateRecord(record) {
     !["core", "terminal", "occupant"].every(key => text(record.worker[key])))) errors.push("worker must be null or bind core, terminal and occupant");
   if (record.revision !== null && !revision(record.revision)) errors.push("invalid revision");
   if (!Array.isArray(record.artifacts) || !record.artifacts.every(text)) errors.push("artifacts must be paths");
+  if (record.decisions !== undefined && !text(record.decisions)) errors.push("decisions must be a path when present");
   if (record.receipt !== null && (!object(record.receipt) ||
     !["accepted", "rejected", "incomplete"].includes(record.receipt.decision) ||
     !revision(record.receipt.revision) || !text(record.receipt.coordinator) ||

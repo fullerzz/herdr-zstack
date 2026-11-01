@@ -11,11 +11,13 @@ import { pathToFileURL } from 'node:url';
 import { updateBoard, withFileLock, writeAtomic, writeRecord } from '../records/task-record-store.mjs';
 import { parseRecord } from '../mods/task-evidence/task-record.js';
 import { boardKey, MAX_BOARD } from '../mods/task-evidence/board.js';
+import { DECISION_HEADER, decisionCell } from '../mods/task-evidence/decisions.js';
 
 const USAGE = `Usage:
   task.mjs start --task <id> --scope <text> --goal <text> [--label <text>]
   task.mjs note --task <id> <status>
   task.mjs artifact --task <id> <path>
+  task.mjs decide --task <id> --phase <text> --why <text> --evidence <pointers> --result <text> <decision>
   task.mjs finish --task <id> [<outcome>]
   task.mjs board add (--record <path> | --run <path>) --label <text> [--machine <name>]
   task.mjs board remove (--record <path> | --run <path>) [--machine <name>]
@@ -30,6 +32,7 @@ const options = {
   task: { type: 'string' }, scope: { type: 'string' }, goal: { type: 'string' }, label: { type: 'string' },
   checkout: { type: 'string' }, coordinator: { type: 'string' }, board: { type: 'string' },
   record: { type: 'string' }, run: { type: 'string' }, machine: { type: 'string' }, help: { type: 'boolean', short: 'h' },
+  phase: { type: 'string' }, why: { type: 'string' }, evidence: { type: 'string' }, result: { type: 'string' },
 };
 
 export function defaultBoard(env = process.env) {
@@ -63,6 +66,15 @@ async function appendStatus(path, taskId, text, at) {
     } catch (error) { if (error.code !== 'ENOENT') throw error; }
     await writeAtomic(path, statusDocument(taskId, text, [`- ${at} — ${text}`, ...entries]));
   });
+}
+
+// decisions.tsv is CLI-owned and append-only: the header, then one row per decision.
+async function readDecisionLog(path) {
+  let previous = `${DECISION_HEADER}\n`;
+  try { previous = await readFile(path, 'utf8'); }
+  catch (error) { if (error.code !== 'ENOENT') throw error; }
+  if (previous.split(/\r?\n/, 1)[0] !== DECISION_HEADER) throw new Error(`${path} is not a decision log; refusing to append`);
+  return previous;
 }
 
 async function readOwnRecord(path) {
@@ -134,25 +146,39 @@ export async function main(argv, { env = process.env, cwd = process.cwd(), now =
     return;
   }
 
-  const record = await readOwnRecord(recordPath);
-  if (record.coordinator !== coordinator) throw new Error(`only the coordinator ${record.coordinator} may update this task`);
-  const update = changes => writeRecord(recordPath, { ...record, ...changes, sequence: record.sequence + 1 },
-    { writer: coordinator, expectedSequence: record.sequence });
+  await withFileLock(join(folder, 'cli'), async () => {
+    const record = await readOwnRecord(recordPath);
+    if (record.coordinator !== coordinator) throw new Error(`only the coordinator ${record.coordinator} may update this task`);
+    const update = changes => writeRecord(recordPath, { ...record, ...changes, sequence: record.sequence + 1 },
+      { writer: coordinator, expectedSequence: record.sequence });
 
-  if (command === 'note') {
-    const text = line(rest.join(' '));
-    if (!text) throw new Error('note needs a status');
-    await appendStatus(statusPath, record.taskId, text, now());
-  } else if (command === 'artifact') {
-    const [path] = rest;
-    if (!path) throw new Error('artifact needs a path');
-    if (!record.artifacts.includes(path)) await update({ artifacts: [...record.artifacts, path] });
-  } else if (command === 'finish') {
-    const text = line(rest.join(' '));
-    await appendStatus(statusPath, record.taskId, text ? `Finished: ${text}` : 'Finished.', now());
-    // Completed is reported activity only; acceptance needs a coordinator receipt.
-    if (record.activity !== 'completed') await update({ activity: 'completed' });
-  } else throw new Error(`unknown command: ${command}\n${USAGE}`);
+    if (command === 'note') {
+      const text = line(rest.join(' '));
+      if (!text) throw new Error('note needs a status');
+      await appendStatus(statusPath, record.taskId, text, now());
+    } else if (command === 'artifact') {
+      const [path] = rest;
+      if (!path) throw new Error('artifact needs a path');
+      if (!record.artifacts.includes(path)) await update({ artifacts: [...record.artifacts, path] });
+    } else if (command === 'decide') {
+      const row = { phase: values.phase, decision: rest.join(' '), why: values.why, evidence: values.evidence, result: values.result };
+      for (const [key, value] of Object.entries(row)) {
+        if (!value?.trim()) throw new Error(key === 'decision' ? 'decide needs a decision' : `decide needs --${key}`);
+      }
+      // Always the task's own log, so the CLI never writes outside its task folder.
+      const decisions = relative('decisions.tsv');
+      const path = join(checkout, decisions);
+      const previous = await readDecisionLog(path);
+      if (record.decisions !== decisions) await update({ decisions });
+      const separator = previous.endsWith('\n') ? '' : '\n';
+      await writeAtomic(path, `${previous}${separator}${[now(), ...Object.values(row)].map(decisionCell).join('\t')}\n`);
+    } else if (command === 'finish') {
+      const text = line(rest.join(' '));
+      await appendStatus(statusPath, record.taskId, text ? `Finished: ${text}` : 'Finished.', now());
+      // Completed is reported activity only; acceptance needs a coordinator receipt.
+      if (record.activity !== 'completed') await update({ activity: 'completed' });
+    } else throw new Error(`unknown command: ${command}\n${USAGE}`);
+  }, { waitMs: 5000 });
   out(JSON.stringify({ record: recordPath, status: statusPath }));
 }
 
