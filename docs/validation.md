@@ -596,3 +596,295 @@ coordinator checks. These are local artifacts, not portable dependencies.
   children, remote workers, lost identity and failed cleanup were not exercised
   in these live pilots. Scope enforcement remains by sandbox, brief and
   coordinator inspection; it is not a separate per-file sandbox.
+
+## Issue 14: other-provider seats on hc — 2026-10-31
+
+Added [seats](../skills/hc-workflow/references/seats.md), linked from the hc
+companion. It replaces only zstack's one-shot `codex exec` / `claude -p` seat
+launch with an interactive hc terminal. When a seat is needed, which family
+counts and the missing-seat rules stay in zstack's `native-hosts.md`. The
+native one-shot recipes stay upstream. No mod code changed.
+
+### Live arena judge seat — PASS
+
+The user selected Herdr for this session and authorized one Codex judge seat
+under the coordinator `t16` in the default core. They also authorized a Codex
+trust entry for the scratch repository. Coordinator: Claude Code 2.1.316 (Opus 5.5).
+Seat: Codex 0.166.0 on hc/core 0.1.16. Preflight reported `session.status:
+supported`, with caller `t16` as root.
+
+- Scratch repository `/Users/zachfuller/.cache/herdr-zstack/seat14/base` held
+  `criteria.md`, two candidates and `check.py`. Run index `arena14` listed one
+  member, `judge`, writing only `.herdr-tasks/judge/seat/report.md`.
+  `validateRun` passed. `writeRun` and `writeRecord` ran before launch, and the
+  launch argv was persisted with `launchAttempted: true`.
+- MCP: `--disable apps --disable plugins`, then all 11 listed servers disabled
+  with `-c mcp_servers.NAME.enabled=false`. The re-listing showed every server
+  `enabled: false`.
+- Sandbox probes ran with `codex sandbox -P :workspace -C <seat dir>`. Writing
+  the seat directory exited 0. Writing a candidate, the member evidence
+  directory and a sibling of the repository each exited 1 with
+  `Operation not permitted`. The representative check
+  `/usr/bin/python3 -I -B check.py candidates/a.py` exited 0.
+- Launch: `hc run --bg --json --name arena14-judge --cwd <seat dir> --label
+  run=arena14 --label task=judge --label role=seat codex --no-daemon
+  <MCP args> --sandbox workspace-write --ask-for-approval never -C <seat dir>
+  "Read <brief> and follow it."` returned `t1q`, parent `t16`, with no
+  `first_message` field. The binding recorded the core ID and process start,
+  the terminal, and the occupant PID and start.
+- Codex's folder-trust dialog appeared before the task. It said trust applies
+  to the repository root. One `enter` chose "Trust and continue", which
+  persisted `[projects."/Users/zachfuller/.cache/herdr-zstack/seat14/base"]
+  trust_level = "trusted"` in `~/.codex/config.toml`. The screen then showed
+  the prompt once.
+- Identity: the status line showed `GPT-6.1-Sol xhigh`, from CLI defaults.
+  That is an OpenAI model, so the seat is other-family to the Claude
+  coordinator. No model or effort override was passed.
+- Report: `hc wait t1q --timeout 180` returned `reason: message`. The
+  coordinator received `<hc from="t1q arena14-judge">judge done: …/report.md</hc>`.
+  The screen showed the seat's own `hc send t16` succeeding inside
+  `workspace-write`. The report starts `PASS` and scores A 30/30 and B 24/30.
+  It lists exit codes 0 for A and 1 for B (`[-2, -3, 0, 5]` returned 0) and
+  records no blocked commands.
+- Coordinator checks: after the seat was killed and confirmed `finished`, the
+  coordinator reran both checks. A exited 0 and B exited 1, matching the
+  report. `git status --porcelain --untracked-files=all` was empty, and the
+  seat directory held only `report.md`. `recordMemberAcceptance` wrote an
+  accepted receipt at clean digest
+  `sha256:52162002e6a5f4368c461768e8986e3ada4fc980c1cc37e343f711f3a668e08d`.
+  The receipt accepts the seat's report as evidence. Arena would still do the
+  scoring itself.
+- Cleanup: the coordinator read and saved the final screen and ran
+  `hc kill t1q`. `hc get` showed `state: finished`, then `hc rm t1q` ran.
+  `hc ls --all --label run=arena14` returned no terminals. No other terminal
+  was controlled.
+
+Evidence is under `/Users/zachfuller/.cache/herdr-zstack/seat14`: `pilot.mjs`,
+`mcp-check.json`, `probe.json`, and `base/.herdr-tasks/judge/`, which holds the
+brief, the record, the launch argv and response, identity and final screens,
+the report, the coordinator check, and the finished and removal responses.
+These are local artifacts, not portable dependencies.
+
+An earlier probe rooted under `/private/tmp` let a write into a candidate
+succeed, because Codex allows temp-folder writes. The recipe now keeps seats
+and reviewed checkouts out of temp folders. Check commands also run with `-B`,
+because an earlier probe left `__pycache__` in the candidates.
+
+### Claude seat with a Codex coordinator
+
+**Initial runs: BLOCKED at acceptance**, with live proof of the corrected permissions and
+sandbox restrictions. The retry's report says `PASS`; the coordinator rejected
+it because the stopped seat directory contained `.claude/.cc-writes/` as well
+as `report.md`. The extra directory was empty and was preserved as evidence.
+It was not removed to make the acceptance check pass. Its creator was not
+traced; user plugins and hooks were allowed to load.
+
+Coordinator: Codex 0.166.0, own screen `GPT-6.1-Sol xhigh`, root terminal
+`t1g`. `HC_TERMINAL_SOCKET` was
+`/Users/zachfuller/.local/state/herdr-core/default/default.sock`.
+Core: hc 0.1.16, ID `d69141182c390e697d361b31591615ed`, PID 29654,
+process start `Sat Oct 31 15:21:50 2026`. Both Claude seats used the CLI
+default: Claude Code 2.1.316, welcome banner `Opus 5.5 with high effort`.
+This is other-family proof under the Codex coordinator. No model override
+was passed.
+
+Evidence root: `/Users/zachfuller/.cache/herdr-zstack/seat14-claude`.
+The following paths are relative to that root:
+
+| Attempt | Checkout | Run index | Member record / evidence directory | Bound terminal / occupant |
+|---|---|---|---|---|
+| Original recipe | `base` | `base/.herdr-tasks/arena14claude/run.json` | `base/.herdr-tasks/judge/` | `t1r`, Claude PID 95143, start `Sat Oct 31 17:23:42 2026` |
+| Fresh corrected retry | `retry/base` | `retry/base/.herdr-tasks/arena14claude2/run.json` | `retry/base/.herdr-tasks/judge/` | `t1s`, Claude PID 8483, start `Sat Oct 31 17:26:31 2026` |
+
+- `node scripts/preflight.mjs` initially exited 1 in the mise shim
+  (`Operation not permitted`). Running the installed binary directly,
+  `/Users/zachfuller/.local/share/mise/installs/node/lts/bin/node scripts/preflight.mjs`,
+  exited 0 and reported `session.status: supported`, caller `t1g`, and
+  matching caller/CLI sockets. Both `preflight.json` files preserve the JSON
+  and exit code. Version rows remain `untested` against the older baseline;
+  the live session gate passed. No core was restarted.
+- The coordinator read the installed manuals, `hc run --help` and
+  `claude --help`. `pilot.mjs` and `retry/pilot.mjs` adapted the earlier pilot.
+  Each seeded the same criteria, A, B and `check.py`, ignored `.herdr-tasks/`,
+  and committed only its scratch repository. Seed commits:
+  `61bd18096f216b40020896635e44b659a8cb69bf` and
+  `07de0dc2a81668917e54caab6f63a6d9967fc7dd`. Both run indexes and schema 1
+  member records existed before launch; `validateRun` passed. Each
+  `launch-attempt.json` persisted `launchAttempted: true` and the exact argv
+  before `hc run`.
+- The launch was direct `claude`, interactive, parent-linked to `t1g`, with
+  no print flags. Launch JSON omitted `first_message`. Each trust screen
+  named its scratch seat directory; one `hc keys <address> down enter`
+  accepted it. Claude persisted `hasTrustDialogAccepted: true` for the two
+  scratch repository roots in `~/.claude.json`. No personal settings were
+  edited by the coordinator. `collection.json`, identity screens and the
+  task-specific Claude transcripts confirm one brief prompt and one report
+  send per attempt. No brief was resent. The briefs forbade injected
+  session controls, delegation and configuration changes.
+- The original `t1r` refused both Python checks in `dontAsk` mode, with
+  `Permission to use Bash has been denied because Claude Code is running in don't ask mode.`
+  There was no process exit code for these denials. Its `Edit(//…/report.md)`
+  rule permitted the Write tool, and `Bash(hc send t1g *)` permitted the send.
+  The coordinator received the tagged `judge blocked` report from bound
+  `t1r`. The report's claim that Bash was universally blocked was contradicted
+  by the actual successful send; `tool-evidence.json` preserves the outcomes.
+  The coordinator killed `t1r`, confirmed `finished`, checked and rejected
+  its result, then removed it before preparing or launching the fresh retry.
+
+The retry used this argv, with the exact expanded array saved in
+`retry/base/.herdr-tasks/judge/launch-attempt.json`:
+
+```sh
+CHECKOUT=/Users/zachfuller/.cache/herdr-zstack/seat14-claude/retry/base
+SEAT_DIR="$CHECKOUT/.herdr-tasks/judge/seat"
+REPORT="$SEAT_DIR/report.md"
+BRIEF="$CHECKOUT/.herdr-tasks/judge/brief.md"
+hc run --bg --json --name arena14claude2-judge --cwd "$SEAT_DIR" \
+  --label run=arena14claude2 --label task=judge --label role=seat \
+  /Users/zachfuller/.local/bin/claude --strict-mcp-config \
+  --tools Read,Grep,Glob,Write,Bash --permission-mode dontAsk \
+  --allowedTools Read Grep Glob "Edit(/$REPORT)" "Bash(hc send t1g *)" \
+    "Bash(/usr/bin/python3 -I -B $CHECKOUT/check.py $CHECKOUT/candidates/a.py)" \
+    "Bash(/usr/bin/python3 -I -B $CHECKOUT/check.py $CHECKOUT/candidates/b.py)" \
+    "Bash(/usr/bin/touch $CHECKOUT/candidates/probe.txt)" \
+  --settings '{"sandbox":{"enabled":true,"failIfUnavailable":true,"autoAllowBashIfSandboxed":false,"allowUnsandboxedCommands":false,"network":{"allowUnixSockets":["/Users/zachfuller/.local/state/herdr-core/default/default.sock"]}}}' \
+  "Read $BRIEF and follow it."
+```
+
+Only the two exact check rules and the exact negative `touch` probe rule
+were added. No general Bash/interpreter permission, bypass mode, disabled
+sandbox or unsandboxed command was used. Scratch and reviewed paths stayed
+outside temporary folders. The probe rule exercised OS confinement and is
+not needed in a normal judge launch.
+
+| Retry evidence | Observed outcome |
+|---|---|
+| `/usr/bin/python3 -I -B <checkout>/check.py <checkout>/candidates/a.py` | `PASS []`; successful Bash result, exit 0 independently confirmed by coordinator |
+| Same command for `b.py` | Exit 1, `FAIL [([-2, -3, 0, 5], -2, 0)]` |
+| `/usr/bin/touch <checkout>/candidates/probe.txt` | Exit 1, `touch: /Users/zachfuller/.cache/herdr-zstack/seat14-claude/retry/base/candidates/probe.txt: Operation not permitted` |
+| Write tool to `<checkout>/candidates/probe2.txt` | Tool denial in `dontAsk`, no process exit code; no probe file created |
+| Write tool to `$REPORT` | Succeeded through the exact `Edit(//…)` rule; report starts `PASS`, A scores 29/30, B 19/30 |
+| `hc send t1g "judge done: <report>"` | Successful sandboxed Bash result; tagged sender `t1s arena14claude2-judge` matched the binding |
+| `hc wait t1s --timeout 45` | Exit 0, `reason: message`, `from: t1s`; an earlier post-trust wait returned idle before work began |
+
+The coordinator read the actual report at
+`/Users/zachfuller/.cache/herdr-zstack/seat14-claude/retry/base/.herdr-tasks/judge/seat/report.md`.
+Then `hc kill t1s` and `hc get t1s` exited 0 and confirmed `state: finished`.
+Only after freezing the seat did the coordinator take the before/after
+snapshots and run acceptance checks. The same checks were also run after
+stopping the first attempt:
+
+- `/usr/bin/python3 -I -B <checkout>/check.py <checkout>/candidates/a.py`:
+  exit 0, `PASS []`.
+- The B command: exit 1 with the negative-even counterexample above.
+- `git -C <checkout> status --porcelain --untracked-files=all`: exit 0,
+  empty output for both scratch checkouts; both probe files absent.
+- Seat-directory assertion: **exit 1** on both attempts. Entries were
+  `.claude` and `report.md`; `.claude/.cc-writes/` was empty. This check was
+  recorded as rejection rather than calling `recordMemberAcceptance` with
+  passing checks.
+- Both before/after snapshots matched. Both rejected receipts record digest
+  `sha256:52162002e6a5f4368c461768e8986e3ada4fc980c1cc37e343f711f3a668e08d`
+  at their respective seed commits. There is no accepted Claude receipt.
+
+Each member directory preserves `brief.md`, `task.json`, `launch-attempt.json`,
+`launch-result.json`, `launch.json`, `running.json`, identity screens,
+`collected-screen.txt`, `collection.json`, `tool-evidence.json`,
+`coordinator-check.json`, `rejection.json`, the report, and stop/removal
+responses. The retry's `.claude` directory was preserved, not normalized away.
+`trust-evidence.json` records only these scratch projects' trust status.
+
+Cleanup commands `hc rm t1r` and `hc rm t1s` exited 0 after finished-state
+confirmation. `hc ls --all --label run=arena14claude` and the corresponding
+`run=arena14claude2` listing exited 0 with `terminals: []`.
+No unrelated terminal was controlled. The task repository's prior dirty
+changes were preserved; no task-repository commit, push or PR was made.
+
+Current documentation checks: `npm test` exited 0 with all 79 tests passing;
+`git diff --check` exited 0. The test command used the installed Node bin
+directory first in `PATH` to avoid the blocked mise shim. No mod source
+changed, so no mod checker or app UI inspection was needed for this run.
+
+#### Fresh run with the amended staging check — PASS
+
+On 2026-10-31, the user requested a new Claude seat after changing the recipe
+to allow only an empty `.claude/.cc-writes/` staging directory alongside the
+report. One fresh interactive seat ran; the earlier rejected receipts were
+preserved. Coordinator remained `t1g`, Codex `GPT-6.1-Sol xhigh`, on core
+`d69141182c390e697d361b31591615ed` and socket
+`/Users/zachfuller/.local/state/herdr-core/default/default.sock`.
+Preflight exited 0 with `session.status: supported`.
+
+Evidence root:
+`/Users/zachfuller/.cache/herdr-zstack/seat14-claude/amended`.
+`pilot.mjs` reused the corrected launch from the earlier retry, with a fresh
+checkout at `base`, run `arena14claude3` and member `judge`. The exact argv is
+in `base/.herdr-tasks/judge/launch-attempt.json`; it retained `dontAsk`, exact
+`Edit(//…/report.md)`, send, Python-check and negative-touch rules, strict MCP
+configuration and all sandbox settings. Run index
+`base/.herdr-tasks/arena14claude3/run.json` and member record
+`base/.herdr-tasks/judge/task.json` were persisted before launch, followed by
+`launchAttempted: true`. The scratch seed commit was
+`84be17c2bbecbda6074de1963d2efd2e3b2b985c`.
+
+- `hc run` exited 0, returning `t1t`, parent `t1g`. Binding recorded Claude
+  PID 69309, process start `Sat Oct 31 18:18:05 2026`, and the unchanged core
+  identity/process start. The welcome screen showed Claude Code 2.1.316,
+  `Opus 5.5 with high effort`; no model override was supplied.
+- The scratch-folder trust prompt was accepted with
+  `hc keys t1t down enter`. The trust entry applies to this run's scratch
+  repository root. Screen and task transcript confirm one brief prompt.
+- Candidate checks used `/usr/bin/python3 -I -B <checkout>/check.py <candidate>`
+  exactly: A passed with exit 0, B failed with exit 1 and the negative-even
+  counterexample. The report scored A 30/30 and B 18/30.
+- The exact permitted `touch <checkout>/candidates/probe.txt` exited 1 with
+  `Operation not permitted`. Write to `candidates/probe2.txt` was denied by
+  `dontAsk`, with no process exit code. Both probe files were absent.
+- Report Write succeeded. `hc wait t1t --timeout 45` exited 0 with
+  `reason: message`, `from: t1t`. The single tagged `judge done` sender matched
+  the binding, and the coordinator read the actual `seat/report.md`.
+- `hc kill t1t` and `hc get t1t` exited 0; the terminal was confirmed
+  `finished` before coordinator checks. A and B reruns returned 0 and 1.
+  `git status --porcelain --untracked-files=all` exited 0 with empty output.
+- `check-seat.mjs` accepted precisely `report.md` and a real
+  `.claude/.cc-writes/` directory with zero entries, without deleting anything.
+  The directory check exited 0. Its six self-checks also cover report-only
+  acceptance and rejection of staging residue, other `.claude` entries,
+  other seat entries and a symlink in place of staging.
+- Before/after snapshots matched. `recordMemberAcceptance` published an
+  **accepted** receipt in `base/.herdr-tasks/judge/task.json`, at the seed
+  commit and digest
+  `sha256:52162002e6a5f4368c461768e8986e3ada4fc980c1cc37e343f711f3a668e08d`.
+- `hc rm t1t` exited 0. `hc ls --all --label run=arena14claude3` exited 0
+  with `terminals: []`. No other terminal was controlled.
+
+The evidence directory retains the launch, binding, identity and final
+screens, report, `tool-evidence.json`, `collection.json`, `wait.json`,
+`coordinator-check.json`, accepted record and cleanup responses. Skill and
+contract snapshots record the tested revision. `npm test` exited 0 with all
+79 tests passing; `git diff --check` exited 0. No task-repository commit,
+push, personal settings edit or core restart was performed.
+
+### Limits
+
+- The first two Claude receipts remain rejected as recorded. The fresh run
+  above supplies acceptance under the amended empty-staging check; it does
+  not retroactively change those results.
+- Follow-up: the Claude coordinator traced `.claude/.cc-writes/` to Claude
+  Code itself. The 2.1.316 bundle defines `pG=".cc-writes"` in its
+  write-then-rename path. The same empty directory exists under other Claude
+  working directories (`herdr-zstack/.claude/`, `zachs-agent-skills/.claude/`).
+  No plugin or hook was involved. [Seats](../skills/hc-workflow/references/seats.md)
+  now accepts that directory only when it is empty. The fresh
+  Codex-coordinated run above exercised that check and wrote an accepted receipt.
+- No interrogate writing seat ran in a detached worktree with `--add-dir`.
+  A seat whose CLI or sandbox is unavailable was not exercised live; the
+  recipe records that case as a gap.
+- Codex read-only is enforced by the sandbox's writable root plus the brief,
+  not by a read-only sandbox. Claude also requires narrow tool rules.
+  Temp folders stay writable.
+- Earlier Codex-pilot local checks: `npm test` (all 79 Node tests) passed, `claude plugin
+  validate .` passed, relative links in the changed docs resolve, and
+  `git diff --check` passed. No mod code changed, so `herdr-app check` and
+  live UI inspection were not run. Installed-plugin discovery of the new
+  reference after an update was not exercised.
