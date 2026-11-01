@@ -13,7 +13,7 @@ install-templates:
 update-sidebar:
     node scripts/install.mjs update --home "${HERDR_APP_HOME:-$HOME/.config/herdr-app}" --apply
 
-# Install the Codex plugin from this checkout.
+# Install or update the Codex plugin from this checkout.
 install-codex:
     codex plugin marketplace add "{{ justfile_directory() }}"
     codex plugin add herdr-zstack@herdr-zstack-local
@@ -22,7 +22,7 @@ install-codex:
 update-codex:
     codex plugin add herdr-zstack@herdr-zstack-local
 
-# Install the Claude Code plugin from this checkout.
+# Install or update the Claude Code plugin from this checkout.
 install-claude-code:
     claude plugin install herdr-zstack --marketplace "{{ justfile_directory() }}"
     claude plugin marketplace update herdr-zstack-local

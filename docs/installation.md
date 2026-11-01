@@ -140,8 +140,10 @@ just install-claude-code
 just update-claude-code
 ```
 
-Run the install recipe once for each host, then its update recipe after changing
-or pulling this checkout. These recipes use the local checkout; they do not pull
+The install recipes support both first installation and repeat updates; the
+update recipes are shortcuts for already registered hosts. Fresh and repeated
+`just install` runs passed in isolated Codex and Claude Code configurations,
+including existing marketplace registrations. These recipes use the local checkout; they do not pull
 Git changes. Plain `just` lists the recipes. Restart the host session after an
 install or update; Claude Code also supports `/reload-plugins`.
 
