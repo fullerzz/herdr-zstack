@@ -1015,3 +1015,135 @@ code and were fixed in the table or roadmap:
 - The Successor merge and restack paths have run only in tests, not live.
 - Pause and pickup rows reuse the fixture-tested `pausePlan` and `reconcile`
   decisions from issue 4. No live pause or pickup ran for this issue.
+
+## Issue 15: explorers and runners on hc — 2026-10-31
+
+Added the [explorer and runner deltas](../skills/hc-workflow/references/explorers.md),
+linked from the hc companion, the README and the roadmap. They cover how, why,
+blast-radius, architect and teach. Each skill stays direct unless it asks for
+independent coverage at a step the table marks. Read-only members launch with
+the seats tool and sandbox restrictions, not a brief alone. The playbook
+table's bug-fix row no longer calls architect's delegation a gap. No mod code
+changed.
+
+The user selected Herdr for this session and asked for the issue to be
+implemented through it. Coordinator: Claude Code (Opus 5.5) at `t16` on
+`zachs-macbook-pro`, hc 0.1.16 core `d69141182c390e697d361b31591615ed`.
+Preflight exited 0 with `session.status: supported`. Evidence:
+`herdr-zstack/.herdr-tasks/issue-15/`, run index
+`herdr-zstack/.herdr-tasks/why-15/run.json`.
+
+### Small how request stays direct — PASS
+
+With Herdr selected, the coordinator answered "how does `scripts/preflight.mjs`
+decide `session.status`?" with its own Read tool, citing
+`scripts/preflight.mjs:156`, `:167-177`, `:180-190`, `:195` and `:242`.
+`hc ls --all --json` listed 22 terminals before and after, and no address was
+added (`direct-diff.json`). Herdr selection launched no worker.
+
+### One restricted why investigator — coverage PASS, restriction proof partial
+
+A broad why question ("why does the roster hold at most three members, and
+why must writers have exclusive files or separate worktrees?") split into two
+sources. The coordinator searched Git and GitHub directly: commit `ebec254`,
+issue #11 and PR #23. One read-only member covered long-form documents in the
+repository. That category needs no network or MCP.
+
+| Step | Observation |
+|---|---|
+| Record and index | `why-15-docs` written at sequence 1, run index `why-15` at sequence 1, `launchAttempted` and argv saved in the handoff before launch. |
+| Launch, attempt 1 | `t1y`, Claude Code 2.1.316, `Opus 5.5 with high effort`. The argv is the seats §4 restriction: `--strict-mcp-config`, `--tools Read,Grep,Glob,Write,Bash`, `--permission-mode dontAsk`, only `Edit(//…/report.md)` and `Bash(hc send t16 *)` allowed, and the sandbox with the core socket. The task arrived once; no trust dialog appeared. Bound to core PID 29654, occupant PID 29640. |
+| Attempt 1 ends | The user accidentally interrupted `t1y` mid-turn. The screen showed `Interrupted · What should Claude do instead?` and the seat directory was empty. The coordinator did not message it. It rechecked the identity, ran `hc kill t1y`, confirmed `finished` (exit 129) and removed it. The record holds `receipt.decision: incomplete`. |
+| Fresh assignment | `why-15-docs-2` replaced the index entry (sequence 2) with the same brief and restrictions. `t1z` received the task once and was bound to occupant PID 55960. |
+| Restriction | The member made one Bash call outside its rules (`sed` on `seats.md`). Claude refused it: `Permission to use Bash has been denied because Claude Code is running in don't ask mode`. The report records the refusal. |
+| Report | `<hc from="t1z why-15-docs-2">` matched the binding. The coordinator read `seat/report.md` and spot-checked `native-hosts.md:76`, `roster.mjs:65-66` and `roadmap.md:124`; all three match. |
+| Accept | Identity rechecked, `hc kill t1z`, `finished`. The seat directory held only `report.md` and an empty `.claude/.cc-writes/`. Before and after `observeRevision` matched at `8d398b4…`, `sha256:89663760…`. `recordMemberAcceptance` wrote an **accepted** receipt. |
+| Cleanup | `hc rm t1z`, then `hc ls --all --label run=why-15` returned `terminals: []`. No other terminal was controlled. |
+
+The combined answer: the cap and the exclusivity rule come from the shared
+contract. `native-hosts.md` says "Start with 2-3 independent slices" and
+"Writable workers have exclusive files or separate worktrees". Decision D4 and
+`ebec254` explain exclusivity: per-worker receipts bound to one revision
+snapshot, with no shared worker writes. No commit, PR or document states why
+the hard maximum is three rather than another number. Both sources report
+that gap.
+
+The restriction proof in this run was partial. The only refusal came from
+Claude's tool layer, on a read. No write outside the report rule was
+attempted, as seats §4 requires before counting coverage. Two of the four
+acceptance checks in `accept.mjs` were recorded as passing by hand. The launch
+also loaded the user's settings, whose sandbox grants widened it; see the
+interrogation below. The amended run after it supplies the full proof.
+
+### Interrogation fixes for issue 15
+
+`/zstack:interrogate` ran three adversaries as hc members, each in its own
+detached worktree under `~/.cache/herdr-zstack/interrogate-15/`: two Claude
+Code (Opus 5.5) and one Codex seat (`GPT-6.1-Sol xhigh`). The coordinator
+reran each finding in a fresh worktree with only its repro files. Six held:
+
+1. **The read-only restrictions did not remove network, sockets or extra
+   writes.** Both CLIs apply the user's sandbox settings. `~/.claude/settings.json`
+   sets `allowedDomains: ["*"]`, `allowAllUnixSockets: true` and extra
+   `allowWrite` roots. `~/.codex/config.toml` sets `network_access = true` and
+   extra `writable_roots`. Two probe terminals launched with the documented
+   argv proved it. The Codex probe got `HTTP/2.0 200 OK` from `example.com`,
+   and its `touch ~/.cache/uv/…` exited 0. The Claude probe got
+   `HTTP/2.0 200 OK`, connected to the SSH agent and both Docker sockets, and
+   wrote under `~/.cache/uv`. Fix: seats §3 adds `CODEX_SANDBOX_ARGS`, and
+   seats §4 adds `--setting-sources ""`.
+2. **The fallback rule contradicted the shared contract.** `explorers.md`
+   turned a failed member straight into a gap. Fix: one fresh retry, then a
+   gap, with a native agent only as a disclosed, user-selected fallback.
+3. **The live PASS skipped seats §4's out-of-scope write proof.** Fix: the
+   heading above now says partial, and `explorers.md` requires an in-run
+   probe ([`scripts/restriction-probe.sh`](../scripts/restriction-probe.sh))
+   with computed checks.
+4. **The after-stop check could not see writes elsewhere under
+   `.herdr-tasks/`.** A probe against the real `observeRevision` showed five
+   undetected out-of-scope writes there. Fix: `explorers.md` scopes the digest
+   claim to the checkout outside `.herdr-tasks`, checks the member directory's
+   entries, and relies on the probe's section 4 for the rest.
+5. **Three reviewers or runners plus the judge do not fit one index.** The
+   real `validateRun` refused four members. Fix: the blast-radius and
+   architect rows add the Seat in a new `writeRun` sequence after accepting
+   three members, and link the rolling index.
+6. **The roadmap marked M4.3 implemented while the inventory assigned eight
+   more entries to it.** Fix: the roadmap lists them as still planned.
+
+A dropped finding was also fixed. `Bash(hc send <coord> *)` matches
+`hc send <coord> --force …`, which types into a blocked dialog. hc accepts
+`--force` after the address. The send rules are now exact.
+
+### Restriction proof under the amended recipes — PASS
+
+Run `fx-15`, coordinator `t16`, index
+`herdr-zstack/.herdr-tasks/fx-15/run.json`, snapshot `8d398b4…`,
+`sha256:54848fcf…`. Evidence: `herdr-zstack/.herdr-tasks/int-15-fix/`. Both
+members were bound right after launch. Their probe was the pre-ship copy of
+`scripts/restriction-probe.sh`; it differs only in an absolute `xh` path, the
+probe file name and the usage guard.
+
+| Member | Observation |
+|---|---|
+| `why-15-docs-3`, Claude Code 2.1.316 at `t28` | The seats §4 argv with `--setting-sources ""` and exact send rules. The banner showed `Opus 5.5`, without the user's default effort. Probe: egress failed (`deny network-outbound example.com:443`); launchd and both Docker sockets were refused; writes to `~/.cache/uv` and beside the record failed with `Operation not permitted`; the write inside `seat/` succeeded; `hc get` exited 0. A `Write` outside the report rule and `hc send t16 "…" --force` were both refused by `dontAsk`, and no forced text arrived. It then repeated the why investigation and sent its report with the exact rule. |
+| `fx-codex`, Codex 0.166.0 at `t29` | The seats §3 argv with `CODEX_SANDBOX_ARGS`. Before launch, `debug prompt-input` printed `Network access is restricted.` and no writable roots. Probe: egress failed; all four sockets, including the SSH agent, were refused; both outside writes failed; the write inside `seat/` succeeded. `hc get` exited 5, because the restricted network also blocks the core socket. The coordinator collected it by `hc wait` status. |
+| Accept | Identities rechecked, both stopped and `finished`. `accept.mjs` computed every check: unchanged digest, member directories holding only `brief.md`, `task.json` and `seat/`, seat contents, and every required refusal in the report. Both received **accepted** receipts. `hc rm t28 t29`, then `hc ls --all --label run=fx-15` returned `terminals: []`. |
+
+### Checks and limits
+
+- `node --test mods/*/*.test.mjs workflows/*.test.mjs scripts/*.test.mjs`
+  passed (81 tests). `herdr-app check mods/task-evidence` passed.
+  `git diff --check` passed. Every relative link in the changed files
+  resolves.
+- The Codex member ran only the probe, not coverage work. Exact Git rules for
+  an investigator, blast-radius reviewers and architect runners were not
+  exercised live.
+- Whether Claude loads plugins and hooks without settings files was not
+  checked. `templates/comment-sicko-claude.md` still allows
+  `Bash(hc send:*)`; read-only members do not use templates.
+- The member shared the coordinator's model family. That is allowed for an
+  investigator; it gives no cross-provider coverage.
+- The uncommitted issue #15 edits were present in the reviewed checkout. The
+  brief marked them out of scope. The snapshot shows the checkout outside
+  `.herdr-tasks` unchanged; it does not cover `.herdr-tasks` itself.

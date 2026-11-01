@@ -26,6 +26,11 @@ session-pickup or worktree-cleanup, use the [playbook table](references/playbook
 to map each delegation, pause, pickup and cleanup step to hc operations and
 record fields. Steps it marks direct stay direct.
 
+When the selected workflow is how, why, blast-radius, architect or teach, use
+the [explorer and runner deltas](references/explorers.md). They stay direct
+unless the skill asks for independent coverage, and they restrict every
+read-only member with real tool and sandbox limits.
+
 When the selected workflow needs a seat from another model family, such as
 arena's judge or interrogate's other-provider adversary, also apply
 [seats](references/seats.md). It replaces only the native one-shot seat launch
