@@ -2,7 +2,7 @@
 
 This file covers long tests, servers and watchers, such as zstack's `watch-pr`, run as task-owned hc terminals. A supporting process is a plain program, not an agent. It has no brief, report or receipt. A brief check that finishes inside one host command stays direct. The selected playbook still decides whether a process is needed, and the user's request still bounds what it may do. Running in the background never adds authority.
 
-The baseline is hc 0.1.16 on macOS, observed live in [validation](../../../docs/validation.md#issue-17-supporting-processes-and-live-restart-recovery--2026-11-01). Re-read `hc --skill` and the help for `run`, `wait`, `get` and `keep` before you rely on this syntax. `<run>`, `<task>`, `<purpose>` and `<t>` are placeholders.
+The [execution contract](../../../docs/execution-contract.md)'s baseline is hc 0.1.15. This procedure was observed live only on hc 0.1.16 on macOS, which is newer than that baseline, as recorded in [validation](../../../docs/validation.md#issue-17-supporting-processes-and-live-restart-recovery--2026-11-01). Re-read `hc --skill` and the help for `run`, `wait`, `get` and `keep` before you rely on this syntax. `<run>`, `<task>`, `<purpose>` and `<t>` are placeholders.
 
 ## Launch
 
