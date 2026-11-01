@@ -110,6 +110,11 @@ When zstack's swarm is the selected workflow, the hc companion loads this
 plugin's [swarm addendum](../skills/swarm/SKILL.md) alongside the shared skill.
 It adds execution mechanics without copying or replacing zstack's workflow.
 
+When a selected workflow needs a seat from another model family, such as
+arena's judge or interrogate's other-provider adversary, the hc companion
+applies [seats](../skills/hc-workflow/references/seats.md). That reference
+replaces only zstack's one-shot seat launch with an interactive hc terminal.
+
 With [just](https://just.systems/) installed, run these from this checkout:
 
 ```sh
