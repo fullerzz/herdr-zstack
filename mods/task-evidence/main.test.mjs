@@ -432,3 +432,74 @@ test('an emptied board returns to manual mode and discards task reads still in f
   assert.equal(p.instance.files[0].path, '/notes.md', 'manual files return');
   await p.close();
 });
+
+// Exercise host-style one-shot folder notifications without changing terminal facts.
+async function watchedRoster(machine = null) {
+  const indexPath = '/coordinator/.herdr-tasks/run/run.json';
+  const roster = {...run, members: run.members.map((m, i) => ({...m, checkout: `/checkout-${i}`}))};
+  const paths = roster.members.map(m => `${m.checkout}/.herdr-tasks/${m.taskId}/task.json`);
+  const entries = {[indexPath]: JSON.stringify(roster)};
+  paths.forEach((path, i) => { entries[path] = JSON.stringify({...active, taskId: roster.members[i].taskId,
+    checkout: roster.members[i].checkout, brief: `.herdr-tasks/${roster.members[i].taskId}/brief.md`,
+    handoff: `.herdr-tasks/${roster.members[i].taskId}/status.md`}); });
+  const p = await panel(async path => entries[path] ?? null, {tasks: [{run: indexPath, board: true, machine}]});
+  const watches = [];
+  p.host.watch = path => new Promise(resolve => watches.push({path, resolve}));
+  // Start spawned loops and reads; loops suspend on the controlled watches.
+  const drain = async () => {
+    while (p.callbacks.length) { p.callbacks.shift()(p.cx); await flush(); }
+  };
+  await drain();
+  return {...p, entries, roster, paths, indexPath, watches, drain,
+    close: async () => { p.instance.close(); watches.forEach(w => w.resolve([])); await flush(); p.cleanup(); }};
+}
+
+test('split-checkout roster watches refresh member records and status with unchanged terminal facts', async () => {
+  const p = await watchedRoster();
+  try {
+    assert.deepEqual(p.watches.map(w => w.path).sort(), ['/checkout-0/.herdr-tasks', '/checkout-1/.herdr-tasks', '/coordinator/.herdr-tasks']);
+    p.instance.selectMember(p.cx, 1); await p.drain();
+    const file = p.instance.files[p.instance.selected].path;
+    p.entries[file] = 'verified status';
+    p.entries[p.paths[1]] = JSON.stringify({...JSON.parse(p.entries[p.paths[1]]), activity: 'completed', sequence: 2});
+    p.watches.find(w => w.path === '/checkout-1/.herdr-tasks').resolve([file, p.paths[1]]);
+    await flush(); await p.drain();
+    assert.equal(p.instance.record.activity, 'completed');
+    assert.equal(p.instance.memberIndex, 1);
+    assert.equal(p.instance.files[p.instance.selected].path, file);
+    assert.equal(p.instance.snapshot.text, 'verified status');
+    assert.deepEqual(p.host.terminals, []);
+    assert.equal(p.watches.filter(w => w.path === '/checkout-0/.herdr-tasks').length, 1, 'unchanged subscription stays pending');
+    assert.equal(p.watches.filter(w => w.path === '/coordinator/.herdr-tasks').length, 1);
+  } finally { await p.close(); }
+});
+
+test('roster membership reconciles watches, deduplicates folders and ignores removed or deselected events', async () => {
+  const p = await watchedRoster();
+  try {
+    const removed = p.watches.find(w => w.path === '/checkout-1/.herdr-tasks');
+    p.roster.members[1].checkout = '/checkout-0';
+    p.entries[p.indexPath] = JSON.stringify(p.roster);
+    p.watches.find(w => w.path === '/coordinator/.herdr-tasks').resolve([p.indexPath]);
+    await flush(); await p.drain();
+    assert.equal(p.watches.filter(w => w.path === '/checkout-0/.herdr-tasks').length, 1, 'members sharing a folder share the watch');
+    removed.resolve([]); await flush();
+    assert.equal(p.callbacks.length, 0, 'removed folder event is stale');
+    assert.equal(p.watches.filter(w => w.path === removed.path).length, 1, 'removed loop does not rearm');
+    p.roster.members[1].checkout = '/checkout-new';
+    p.entries[p.indexPath] = JSON.stringify(p.roster);
+    p.watches.findLast(w => w.path === '/coordinator/.herdr-tasks').resolve([p.indexPath]);
+    await flush(); await p.drain();
+    assert.equal(p.watches.filter(w => w.path === '/checkout-new/.herdr-tasks').length, 1, 'missing member record still gets a watch');
+    p.instance.tasks.push({record: '/other/task.json'});
+    p.instance.taskIndex = 1; p.instance.loadTask(p.cx); await p.drain();
+    p.watches.find(w => w.path === '/checkout-new/.herdr-tasks').resolve([]); await flush();
+    assert.equal(p.callbacks.length, 0, 'previous selection cannot refresh the new selection');
+  } finally { await p.close(); }
+});
+
+test('remote board rosters never watch local index or member folders', async () => {
+  const p = await watchedRoster('server');
+  try { assert.deepEqual(p.watches, []); }
+  finally { await p.close(); }
+});

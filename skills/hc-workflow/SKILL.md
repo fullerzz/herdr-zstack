@@ -55,7 +55,7 @@ While z-mode is active and Herdr is selected, track every task beyond a one-repl
 2. At each phase change, run `node "$TASK_CLI" note --task <id> "<one-line status>"`. Use the same one-line status you give the user. Write the next safe action before a pause or a wait for the user.
 3. Name each evidence file as you produce it: `node "$TASK_CLI" artifact --task <id> <path>`.
 4. When the task ends, run `node "$TASK_CLI" finish --task <id> "<outcome>"`. A finished task is reported activity only. Do not write a receipt for your own work.
-5. For a roster, also add the run index after `writeRun`: `node "$TASK_CLI" board add --run <run.json> --label "<run>"`.
+5. For a roster, also add the run index after `writeRun`: `node "$TASK_CLI" board add --run "<absolute path to .herdr-tasks/<run>/run.json>" --label "<run>"`.
 
 The CLI refuses writers other than the recorded coordinator, which is `$HC_TERMINAL_ID` by default. A new session starts a new task ID and names the earlier task in its brief. Workers never run these commands. A failed tracking write is reported once and does not block the task. The panel finds the board only when the layout's Task & Evidence block sets a `board` prop; see the [mod README](../../mods/task-evidence/README.md#tracked-tasks).
 

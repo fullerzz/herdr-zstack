@@ -75,23 +75,34 @@ export default class TaskEvidence extends View {
     }
   }
 
-  // Board tasks on this computer reread when their evidence folder changes.
-  watchTask(cx, choice) {
-    const folder = choice.board && !choice.machine ? evidenceFolder(choice) : null;
-    const key = folder && boardKey(choice);
-    if (key === this.watchKey) return;
-    this.watchKey = key;
-    const token = this.taskWatch = folder ? {} : null;
-    if (!folder) return;
-    cx.spawn(async cx => {
-      for (;;) {
-        try { await watchFolder(folder); }
-        catch { if (this.taskWatch === token) { this.taskWatch = null; this.watchKey = undefined; } return; }
-        if (this.closed || this.taskWatch !== token) return;
-        this.loadTask(cx, { keep: true });
-        cx.notify();
-      }
-    });
+  // A local board roster may keep its members in separate checkouts. Retain
+  // unchanged subscriptions; removed folders and old selections lose authority.
+  watchTask(cx, choice, members = []) {
+    const local = choice.board && !choice.machine;
+    const key = local ? boardKey(choice) : null;
+    if (key !== this.watchKey) {
+      this.watchKey = key;
+      this.taskWatch = null;
+    }
+    const watches = this.taskWatch ?? new Map();
+    this.taskWatch = watches;
+    const folders = new Set(local ? [evidenceFolder(choice), ...members.map(member => evidenceFolder({ record: member.path }))].filter(Boolean) : []);
+    for (const folder of watches.keys()) if (!folders.has(folder)) watches.delete(folder);
+    for (const folder of folders) {
+      if (watches.has(folder)) continue;
+      const token = {};
+      watches.set(folder, token);
+      const current = () => !this.closed && this.taskWatch === watches && watches.get(folder) === token;
+      cx.spawn(async cx => {
+        while (current()) {
+          try { await watchFolder(folder); }
+          catch { if (current()) watches.delete(folder); return; }
+          if (!current()) return;
+          this.loadTask(cx, { keep: true });
+          cx.notify();
+        }
+      });
+    }
   }
 
   // Manual refresh and task selection clear evidence first. A fact-driven
@@ -99,7 +110,7 @@ export default class TaskEvidence extends View {
   loadTask(cx, { keep = false } = {}) {
     const choice = this.tasks[this.taskIndex];
     const machine = choice.machine ?? null;
-    this.watchTask(cx, choice);
+    this.watchTask(cx, choice, this.watchKey === boardKey(choice) ? this.members : []);
     const request = this.taskRequest = (this.taskRequest ?? 0) + 1;
     this.reading = true;
     if (!keep) {
@@ -118,11 +129,12 @@ export default class TaskEvidence extends View {
         members = [{ taskId: member.record?.taskId ?? null, ...member }];
         state = member.state;
       }
-      if (request !== this.taskRequest) return;
+      if (this.closed || request !== this.taskRequest) return;
       const shown = { taskId: this.members[this.memberIndex]?.taskId, path: this.files[this.selected]?.path };
       this.reading = false;
       this.roster = roster;
       this.members = members;
+      this.watchTask(cx, choice, members);
       this.recordState = state;
       this.recordAt = new Date().toLocaleTimeString();
       this.factKey = factKey(rosterFacts({ runId: roster?.runId ?? null, members }, before, machine));

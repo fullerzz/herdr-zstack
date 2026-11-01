@@ -42,7 +42,7 @@ The board is one user-level file, normally `~/.local/state/herdr-zstack/board.js
 ] }
 ```
 
-Each entry has a `label` and exactly one absolute `record` or `run`. `machine` routes the entry's reads, and null means this computer. The board holds at most 50 entries, and no two can share the same path and machine. `validateBoard` and `readBoard` in `mods/task-evidence/board.js` have no host imports. The board says where to read. It never states activity, ownership or acceptance.
+Each entry has a `label` and exactly one absolute `record` or `run`. `machine` routes the entry's reads, and null means this computer. The board holds at most 50 entries, and no two can share the same target kind (`record` or `run`), path and machine. `validateBoard` and `readBoard` in `mods/task-evidence/board.js` have no host imports. The board says where to read. It never states activity, ownership or acceptance.
 
 `updateBoard(path, change)` in `records/task-record-store.mjs` creates the parent folder. It holds the board's `.lock`, rereads and validates the current board, and applies `change(tasks)`. Then it writes the next sequence atomically. A busy lock is retried for about a second and never stolen. A malformed board is refused, not repaired.
 
