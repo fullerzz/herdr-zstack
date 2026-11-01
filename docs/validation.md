@@ -984,6 +984,32 @@ with `gh pr merge 27 --squash --match-head-commit 24b47eb…`, which produced
 summary to the PR body after the owner's text. The owner worktree is kept for
 review.
 
+### PR #28 review fixes
+
+The Codex and cubic reviewers raised seven threads. All seven held against the
+code and were fixed in the table or roadmap:
+
+- **Head check:** status alone cannot prove the PR head's content. A scratch
+  repository with `assume-unchanged` printed empty status and an unchanged
+  `HEAD`, while `observeRevision` gave a digest different from a fresh
+  checkout. The check now compares the owner's digest with a fresh detached
+  checkout of `headRefOid`. A new test covers `assume-unchanged` and
+  `skip-worktree`.
+- **Pilot receipt:** the pilot's Head check used the status form. Rechecked
+  afterwards, its receipt digest (`sha256:fb3fe9a9…`) equals a fresh
+  detached checkout of `24b47eb`.
+- **`acceptanceStatus`:** the later gate now passes the verified machine and
+  checkout along with the snapshot.
+- **Stop:** identity is rechecked immediately before each control call.
+- **Rolling index:**
+  - The index counts Seats, and a slot stays free for a required verifier.
+  - Only members in their own worktree are replaced one at a time.
+  - Members sharing a checkout are accepted together.
+- **Roadmap:** the status line now lists M4.4.
+
+`node --test mods/*/*.test.mjs workflows/*.test.mjs scripts/*.test.mjs` passed
+(81 tests).
+
 ### Not yet proven
 
 - The Successor merge and restack paths have run only in tests, not live.

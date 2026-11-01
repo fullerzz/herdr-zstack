@@ -302,3 +302,31 @@ test('a Successor replaces a finished owner and is accepted at the restacked hea
     assert.equal(status(await accept(run, 'own-2', 2, restacked), restacked), 'accepted');
   } finally { await rm(base, { recursive: true, force: true }); }
 });
+
+test('the Head check compares digests because index flags hide edits from git status', async () => {
+  const { observeRevision } = await import('../records/task-record-store.mjs');
+  const base = await mkdtemp(join(tmpdir(), 'hc-head-check-'));
+  const git = (cwd, ...args) => execFileSync('git', ['-C', cwd, ...args], { encoding: 'utf8' }).trim();
+  try {
+    const owner = join(base, 'owner');
+    await mkdir(owner);
+    git(owner, 'init', '-q');
+    git(owner, 'config', 'user.email', 'test@example.invalid');
+    git(owner, 'config', 'user.name', 'test');
+    await writeFile(join(owner, 'a.txt'), '1\n');
+    await writeFile(join(owner, 'b.txt'), '1\n');
+    git(owner, 'add', '.');
+    git(owner, 'commit', '-qm', 'head');
+    const head = git(owner, 'rev-parse', 'HEAD');
+    const fresh = join(base, 'fresh');
+    git(owner, 'worktree', 'add', '-q', '--detach', fresh, head);
+    assert.equal((await observeRevision(owner)).worktreeDigest, (await observeRevision(fresh)).worktreeDigest);
+    git(owner, 'update-index', '--assume-unchanged', 'a.txt');
+    git(owner, 'update-index', '--skip-worktree', 'b.txt');
+    await writeFile(join(owner, 'a.txt'), '2\n');
+    await writeFile(join(owner, 'b.txt'), '2\n');
+    assert.equal(git(owner, 'status', '--porcelain', '--untracked-files=all'), '', 'status hides both edits');
+    assert.equal(git(owner, 'rev-parse', 'HEAD'), head);
+    assert.notEqual((await observeRevision(owner)).worktreeDigest, (await observeRevision(fresh)).worktreeDigest);
+  } finally { await rm(base, { recursive: true, force: true }); }
+});
