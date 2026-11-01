@@ -4,7 +4,7 @@ Herdr-specific workflows and native UI for zstack. This repository owns integrat
 
 ## Available now
 
-- [Task & Evidence](mods/task-evidence/README.md): explicit task selection, read-only brief/artifacts/handoff, receipt snapshots, and separate ownership-unverified live activity.
+- [Task & Evidence](mods/task-evidence/README.md): explicit task or roster selection, read-only brief/artifacts/handoff, per-member receipt snapshots and binding status, refresh on core fact changes, and separate ownership-unverified live activity.
 - [Execution contract](docs/execution-contract.md): native operation matrix, capability preflight, zstack compatibility, and single-worker ownership boundaries. `node scripts/preflight.mjs` reports native-session detection and the capability matrix as read-only JSON.
 - [Task records and revision receipts](docs/task-record.md): shared schema, coordinator writer, local revision observation, and fail-closed acceptance checks.
 - [Installation](docs/installation.md): reproducible namespaced mod installation, personal layout recipe, and CI checks.
@@ -31,7 +31,7 @@ Herdr supplies `gpui-kit`, `gpui-base`, and `herdr` at runtime; do not install t
 
 Follow the [installation guide](docs/installation.md) and [mod configuration guide](mods/task-evidence/README.md). The installer copies the viewer to `zstack-task-evidence` and its tab bar to
 `zstack-task-evidence-tabs`. Follow the [shared sidebar recipe](examples/layout-recipe.md)
-to add a collapsible Task & Evidence button beside Files and Changes in a personal layout clone. Installed files are copies; source edits require an explicit update. No installation happens from running tests.
+to add a collapsible Task & Evidence button beside Files and Changes in a personal layout clone, or the [roster layout recipe](examples/roster-layout.md) to show a run's members beside the coordinator. Installed files are copies; source edits require an explicit update. No installation happens from running tests.
 
 For the initial development setup, `personal-task-evidence` is a copy of the existing personal layout; switching back to `personal` restores the previous presentation. Task paths are explicit and the viewer does not infer success from agent status.
 

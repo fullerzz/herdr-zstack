@@ -2,18 +2,18 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 
-const recordModel = await readFile(new URL("./task-record.js", import.meta.url), "utf8");
-const model = await readFile(new URL("./model.js", import.meta.url), "utf8");
 const main = await readFile(new URL("./main.js", import.meta.url), "utf8");
+// Host modules become one stub; sibling modules load from disk, as the installer ships them.
+const hostImport = /^import (.*) from "(gpui-kit|gpui-base|herdr)";$/gm;
+const siblingImport = /from "\.\/([\w-]+\.js)";/g;
 async function panel(read, props = {}) {
   const callbacks = [];
   const key = `taskEvidenceTest${Math.random()}`;
-  globalThis[key] = { read, spaces: [], props: { notes: "/notes.md", artifacts: [{ path: "/checks.log" }], ...props } };
-  const source = main.replace(/^import .*;\n/gm, "")
-    .replace("export default class", "class") + `\nexport default TaskEvidence;`;
-  const prelude = `const View = class {}; const readTextFile = globalThis[${JSON.stringify(key)}].read; const spaces = () => globalThis[${JSON.stringify(key)}].spaces; const props = () => globalThis[${JSON.stringify(key)}].props;
-    const theme = () => ({}); const agents = () => [];
-    const div = () => { const node = {items: [], styles: {}}; let builder;
+  globalThis[key] = { read, spaces: [], terminals: [], props: { notes: "/notes.md", artifacts: [{ path: "/checks.log" }], ...props } };
+  const host = `const h = globalThis[${JSON.stringify(key)}];
+    export const View = class {}; export const readTextFile = (...args) => h.read(...args); export const spaces = () => h.spaces; export const props = () => h.props;
+    export const theme = () => ({}); export const agents = () => []; export const terminals = () => h.terminals; export const run = () => null;
+    export const div = () => { const node = {items: [], styles: {}}; let builder;
       builder = new Proxy(node, {get(target, name) {
         if (name in target) return target[name];
         return (...args) => {
@@ -25,12 +25,15 @@ async function panel(read, props = {}) {
         };
       }}); return builder;
     };
-    const v_flex = div, h_flex = div; const TextView = {markdown: (id, text) => div().id(id).child(text)};\n`;
-  const { default: Panel } = await import(`data:text/javascript;base64,${Buffer.from(prelude + recordModel + model + source).toString("base64")}`);
+    export const v_flex = div, h_flex = div; export const TextView = {markdown: (id, text) => div().id(id).child(text)};\n`;
+  const hostUrl = `data:text/javascript;base64,${Buffer.from(host).toString("base64")}`;
+  const source = main.replace(hostImport, (_line, names) => `import ${names} from "${hostUrl}";`)
+    .replace(siblingImport, (_match, file) => `from "${new URL(`./${file}`, import.meta.url)}";`);
+  const { default: Panel } = await import(`data:text/javascript;base64,${Buffer.from(source).toString("base64")}`);
   const instance = new Panel();
   const cx = { spawn: fn => callbacks.push(fn), notify() {} };
   instance.init(undefined, cx);
-  return { instance, cx, callbacks, cleanup: () => delete globalThis[key] };
+  return { instance, cx, callbacks, host: globalThis[key], cleanup: () => delete globalThis[key] };
 }
 
 test("root mod reads layout configuration from herdr.props", async () => {
@@ -137,4 +140,127 @@ test('task reads distinguish missing, malformed, unavailable and stale receipt',
     if(value !== stale) assert.deepEqual(p.instance.files,[]);
     p.cleanup();
   }
+});
+
+const run = JSON.parse(await readFile(new URL('../../records/fixtures/run.json', import.meta.url), 'utf8'));
+const accepted = JSON.parse(await readFile(new URL('../../records/fixtures/accepted.json', import.meta.url), 'utf8'));
+const memberPath = id => `${run.checkout}/.herdr-tasks/${id}/task.json`;
+const rosterFiles = (overrides = {}) => ({
+  '/idx/run.json': JSON.stringify(run),
+  [memberPath('pilot-a')]: JSON.stringify({...active, taskId: 'pilot-a', owner: 'worker-a', worker: {core: 'c', terminal: 't5', occupant: 'o'}}),
+  [memberPath('pilot-b')]: JSON.stringify({...accepted, taskId: 'pilot-b', owner: 'worker-b', worker: null}),
+  ...overrides,
+});
+const texts = node => typeof node === 'string' ? [node] : node.items.flatMap(texts);
+const byId = (node, id) => typeof node === 'string' ? null : node.styles.id?.[0] === id ? node : node.items.map(child => byId(child, id)).find(Boolean) ?? null;
+async function rosterPanel(entries) {
+  const reads = [];
+  const p = await panel(async path => { reads.push(path); return entries[path] ?? null; }, {tasks: [{label: 'Roster', run: '/idx/run.json'}]});
+  await p.callbacks.shift()(p.cx);
+  await p.callbacks.shift()(p.cx);
+  return {...p, reads, entries};
+}
+
+test('roster view shows per-member labels, binding status and receipt snapshots without aggregate acceptance', async () => {
+  const p = await rosterPanel(rosterFiles());
+  p.host.terminals = [{address: 't5', labels: {run: 'roster-pilot', task: 'pilot-a', role: 'worker'}, state: 'live', status: 'working'},
+    {address: 't6', labels: {run: 'roster-pilot', task: 'pilot-a', role: 'process'}, state: 'live'}];
+  const lines = texts(p.instance.render(p.cx));
+  assert.ok(lines.includes('pilot-a · worker-a · active (reported)'));
+  assert.ok(lines.includes('pilot-b · worker-b · completed (reported)'));
+  assert.ok(lines.some(line => /Saved binding t5 \(unconfirmed\): address is live/.test(line)));
+  assert.ok(lines.includes('No worker binding recorded.'));
+  assert.ok(lines.includes(`RECEIPT SNAPSHOT: accepted · ${accepted.receipt.revision.commit.slice(0, 12)}`));
+  assert.ok(lines.includes('t6 · role=process · live'));
+  assert.ok(lines.some(line => /no aggregate acceptance/.test(line)));
+  assert.ok(!lines.some(line => /^Acceptance: accepted/.test(line)), 'a saved receipt is never current acceptance');
+  assert.deepEqual(p.reads, ['/idx/run.json', memberPath('pilot-a'), memberPath('pilot-b'), `${run.checkout}/${active.brief}`]);
+  p.cleanup();
+});
+
+test('selecting a member shows its own evidence files', async () => {
+  const p = await rosterPanel(rosterFiles());
+  byId(p.instance.render(p.cx), 'member-1').styles.on_click[0](undefined, p.cx);
+  assert.equal(p.instance.record.taskId, 'pilot-b');
+  const paths = [accepted.brief, ...accepted.artifacts, ...accepted.receipt.evidence, accepted.handoff].map(path => path.startsWith('/') ? path : `${run.checkout}/${path}`);
+  assert.deepEqual(p.instance.files.map(f => f.path), paths);
+  assert.equal(p.callbacks.length, 1, 'only the selected file is read');
+  p.cleanup();
+});
+
+test('unreadable members stay listed and clear their evidence', async () => {
+  const p = await rosterPanel(rosterFiles({[memberPath('pilot-b')]: '{'}));
+  byId(p.instance.render(p.cx), 'member-1').styles.on_click[0](undefined, p.cx);
+  assert.equal(p.instance.record, null);
+  assert.deepEqual(p.instance.files, []);
+  const lines = texts(p.instance.render(p.cx));
+  assert.ok(lines.includes('Malformed task record: invalid JSON'));
+  assert.ok(lines.includes('The selected member has no readable record, so it has no evidence files.'));
+  p.cleanup();
+});
+
+test('core fact changes reread records once, keeping selection and evidence visible', async () => {
+  const p = await rosterPanel(rosterFiles());
+  const worker = {address: 't5', labels: {run: 'roster-pilot', task: 'pilot-a', role: 'worker'}, state: 'live', status: 'working'};
+  p.host.terminals = [worker];
+  p.instance.render(p.cx);
+  assert.equal(p.callbacks.length, 1, 'first observation after a read is a fact change');
+  await p.callbacks.shift()(p.cx);
+  await p.callbacks.shift()(p.cx);
+  p.instance.render(p.cx);
+  assert.equal(p.callbacks.length, 0, 'unchanged facts do not reread');
+  p.host.terminals = [worker, {address: 't30', labels: {run: 'other'}, state: 'live'}];
+  p.instance.render(p.cx);
+  assert.equal(p.callbacks.length, 0, 'unrelated terminals do not reread');
+
+  byId(p.instance.render(p.cx), 'member-1').styles.on_click[0](undefined, p.cx);
+  await p.callbacks.shift()(p.cx);
+  p.instance.selected = 1; p.instance.load(p.cx); await p.callbacks.shift()(p.cx);
+  const shown = p.instance.snapshot;
+  p.entries[memberPath('pilot-b')] = JSON.stringify({...accepted, taskId: 'pilot-b', owner: 'worker-b', worker: null, activity: 'active'});
+  p.host.terminals = [{...worker, status: 'idle'}];
+  p.instance.render(p.cx);
+  p.instance.render(p.cx);
+  assert.equal(p.callbacks.length, 1, 'one reread while a read is pending');
+  assert.equal(p.instance.snapshot, shown, 'evidence stays visible during the reread');
+  await p.callbacks.shift()(p.cx);
+  assert.equal(p.instance.record.activity, 'active');
+  assert.equal(p.instance.memberIndex, 1);
+  assert.equal(p.instance.selected, 1);
+  assert.equal(p.instance.snapshot, shown);
+  await p.callbacks.shift()(p.cx);
+  assert.equal(p.instance.files[1].path, p.reads.at(-1));
+  p.cleanup();
+});
+
+test('facts changing during a reread trigger another; manual refresh clears first', async () => {
+  let finish;
+  const entries = rosterFiles();
+  const reads = [];
+  const p = await panel(path => { reads.push(path); return path === '/idx/run.json' && finish === null ? new Promise(resolve => { finish = resolve; }) : Promise.resolve(entries[path] ?? null); },
+    {tasks: [{label: 'Roster', run: '/idx/run.json'}]});
+  p.host.terminals = [];
+  finish = undefined;
+  await p.callbacks.shift()(p.cx);
+  await p.callbacks.shift()(p.cx);
+  finish = null;
+  p.host.terminals = [{address: 't5', labels: {}, state: 'live'}];
+  p.instance.render(p.cx);
+  const pending = p.callbacks.shift()(p.cx);
+  p.host.terminals = [{address: 't5', labels: {}, state: 'finished'}];
+  finish(entries['/idx/run.json']); await pending;
+  p.instance.render(p.cx);
+  assert.equal(p.callbacks.length, 2, 'selected file reread plus a second record reread');
+
+  byId(p.instance.render(p.cx), 'refresh').styles.on_click[0](undefined, p.cx);
+  assert.equal(p.instance.roster, null);
+  assert.deepEqual(p.instance.members, []);
+  assert.equal(p.instance.recordState, 'Reading run index…');
+  p.cleanup();
+});
+
+test('panel host surface stays read-only', () => {
+  const imported = [...main.matchAll(/^import \{([^}]*)\} from "herdr";$/gm)].flatMap(m => m[1].split(',').map(name => name.trim()));
+  assert.deepEqual(imported.sort(), ['agents', 'props', 'readTextFile', 'run', 'spaces', 'terminals', 'theme']);
+  assert.deepEqual([...main.matchAll(/run\("([^"]+)"/g)].map(m => m[1]), ['agent.focus'], 'navigation is the only command');
 });

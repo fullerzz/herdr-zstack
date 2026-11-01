@@ -1,5 +1,16 @@
 # Explicit local installation
 
+Run `just install` to install or update this checkout's sidebar mods, hc role
+templates, and Codex and Claude Code plugins. It requires `node`, `codex`, and
+`claude` on PATH and stops if any step fails. Completed steps remain installed;
+rerun after resolving the failure. Restart host sessions to load updated plugins.
+
+Mods use `HERDR_APP_HOME` or `~/.config/herdr-app`; templates use
+`${XDG_CONFIG_HOME:-$HOME/.config}/herdr-core`. Templates use the CLI default
+models and effort, replacing previous installer-supplied overrides. Personal
+layouts, keybindings, and core settings remain untouched; use the layout recipes
+below to opt into presentation changes. This command does not pull Git changes.
+
 Requires Node 24 or newer; there are no npm dependencies. Compatibility follows
 [the execution contract](execution-contract.md): inspected hc 0.1.15,
 herdr-app 0.1.10, and zstack 0.22.0. Installation does not enable either mode,
@@ -29,6 +40,11 @@ hashes and the previous transaction's contents live in
 `.herdr-zstack-install.json` at the app home. Keep that file to retain removal
 and rollback. Reinstall with identical contents does nothing and retains rollback.
 Update also removes obsolete owned runtime files.
+
+To update the Task & Evidence sidebar and its toggle from this checkout, run
+`just update-sidebar`. It applies the update to `HERDR_APP_HOME` when set, or
+`~/.config/herdr-app` otherwise. Run it again after changing or pulling this
+checkout; it does not fetch Git changes or change your layout configuration.
 
 Any unowned name collision or edited owned file aborts the entire plan, including
 removal and rollback, before writes. There is no force overwrite. Back up edits
@@ -124,8 +140,10 @@ just install-claude-code
 just update-claude-code
 ```
 
-Run the install recipe once for each host, then its update recipe after changing
-or pulling this checkout. These recipes use the local checkout; they do not pull
+The install recipes support both first installation and repeat updates; the
+update recipes are shortcuts for already registered hosts. Fresh and repeated
+`just install` runs passed in isolated Codex and Claude Code configurations,
+including existing marketplace registrations. These recipes use the local checkout; they do not pull
 Git changes. Plain `just` lists the recipes. Restart the host session after an
 install or update; Claude Code also supports `/reload-plugins`.
 
@@ -203,7 +221,8 @@ remains unverified.
 
 ### Presentation and verification
 
-For presentation, follow [the portable recipe](../examples/layout-recipe.md).
+For presentation, follow [the portable recipe](../examples/layout-recipe.md), or the
+[roster recipe](../examples/roster-layout.md) for a run beside its coordinator.
 The mod's `place: none` does not activate a layout.
 
 `node --test` runs dependency-free tests, including disposable app-home installs.

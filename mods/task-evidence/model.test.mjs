@@ -31,6 +31,8 @@ test('record file roles and explicit choices preserve manual mode', async () => 
   const {taskChoices,recordFiles,taskActivity} = await import(`data:text/javascript;base64,${Buffer.from(source).toString('base64')}`);
   assert.deepEqual(taskChoices({}),[]);
   assert.deepEqual(taskChoices({tasks:[null, 3, {record:'relative'}, {record:'/task.json'}]}),[{record:'/task.json'}]);
+  assert.deepEqual(taskChoices({tasks:[{run:'/run.json'}, {run:'run.json'}, {record:'/t.json', run:'/r.json'}, {record:'/t.json', run:'r.json'}]}),[{run:'/run.json'}]);
+  assert.deepEqual(taskChoices({run:'/run.json', machine:'server'}),[{label:'Roster', run:'/run.json', machine:'server'}]);
   assert.deepEqual(recordFiles({checkout:'/repo',brief:'brief.md',handoff:'handoff.md',artifacts:['check.log'],receipt:{evidence:['receipt.md']}}).map(f=>f.path),['/repo/brief.md','/repo/check.log','/repo/receipt.md','/repo/handoff.md']);
   const live=[{address:'t1',space:'s',status:'done'}];
   assert.deepEqual(taskActivity({worker:{core:'c',terminal:'t1',occupant:'session'}},live).owned,[]);

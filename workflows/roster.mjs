@@ -3,16 +3,10 @@ import { realpathSync, lstatSync } from 'node:fs';
 import { isDeepStrictEqual } from 'node:util';
 import { withFileLock } from '../records/task-record-store.mjs';
 import { reconcile, recordAcceptance } from './worker-lifecycle.mjs';
+import { validateRunShape, recordPath, runPath, MAX_ROSTER } from '../mods/task-evidence/roster.js';
 
-// A run index groups 1–3 schema 1 task records (D4). Each member keeps its own
-// binding, revision and receipt; the index grants no aggregate acceptance.
-export const MAX_ROSTER = 3;
+export { recordPath, runPath, MAX_ROSTER };
 
-const text = value => typeof value === 'string' && value.trim().length > 0;
-const segment = value => typeof value === 'string' && /^[A-Za-z0-9][A-Za-z0-9._-]*$/.test(value);
-const absolute = value => text(value) && value.startsWith('/') && resolve(value) === value;
-const relative = value => text(value) && !value.startsWith('/') &&
-  value.replace(/\/$/, '').split('/').every(part => part && part !== '.' && part !== '..');
 const overlaps = (left, right) => left === right || left.startsWith(`${right}/`) || right.startsWith(`${left}/`);
 
 // Resolve existing ancestors for files not created yet; case-fold conservatively
@@ -33,30 +27,8 @@ function scopePath(path) {
   }
 }
 
-export const recordPath = member => join(member.checkout, '.herdr-tasks', member.taskId, 'task.json');
-export const runPath = run => join(run.checkout, '.herdr-tasks', run.runId, 'run.json');
-
 export function validateRun(run) {
-  if (run === null || typeof run !== 'object' || Array.isArray(run)) return ['run must be an object'];
-  const errors = [];
-  if (run.schemaVersion !== 1) errors.push('unsupported schemaVersion');
-  if (!Number.isSafeInteger(run.sequence) || run.sequence < 1) errors.push('sequence must be positive');
-  if (!segment(run.runId)) errors.push('runId must be one path segment');
-  for (const key of ['coordinator', 'machine']) if (!text(run[key])) errors.push(`${key} is required`);
-  if (!absolute(run.checkout)) errors.push('checkout must be a normalized absolute path');
-  if (!Array.isArray(run.members) || run.members.length < 1 || run.members.length > MAX_ROSTER) {
-    errors.push(`members must list 1-${MAX_ROSTER} tasks`);
-    return errors;
-  }
-  const ids = new Set();
-  for (const member of run.members) {
-    if (!segment(member?.taskId)) { errors.push('member taskId must be one path segment'); continue; }
-    if (member.taskId === run.runId || ids.has(member.taskId)) errors.push(`duplicate task ID ${member.taskId}`);
-    ids.add(member.taskId);
-    if (!absolute(member.checkout)) errors.push(`${member.taskId}: checkout must be a normalized absolute path`);
-    if (!Array.isArray(member.writes) || !member.writes.length || !member.writes.every(relative))
-      errors.push(`${member.taskId}: writes must be checkout-relative paths`);
-  }
+  const errors = validateRunShape(run);
   if (errors.length) return errors;
   try { return scopeConflicts(run); }
   catch (error) { return [`cannot resolve scope: ${error.message}`]; }

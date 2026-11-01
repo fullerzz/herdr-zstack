@@ -15,9 +15,14 @@ export function taskSpace(props, spaces) {
   return matches.length === 1 ? matches[0] : null;
 }
 
+// Each choice names exactly one absolute task record or run index.
 export function taskChoices(config) {
-  return (Array.isArray(config.tasks) ? config.tasks : config.record ? [{ label: config.title || "Task", record: config.record, machine: config.machine }] : [])
-    .filter(task => task && typeof task === "object" && typeof task.record === "string" && task.record.startsWith("/"));
+  const shorthand = config.record ? [{ label: config.title || "Task", record: config.record, machine: config.machine }] :
+    config.run ? [{ label: config.title || "Roster", run: config.run, machine: config.machine }] : [];
+  const absolute = value => typeof value === "string" && value.startsWith("/");
+  return (Array.isArray(config.tasks) ? config.tasks : shorthand)
+    .filter(task => task && typeof task === "object" && absolute(task.record) !== absolute(task.run) &&
+      [task.record, task.run].every(value => value === undefined || absolute(value)));
 }
 
 export function recordFiles(record) {
