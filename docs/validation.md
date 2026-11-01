@@ -888,3 +888,104 @@ push, personal settings edit or core restart was performed.
   `git diff --check` passed. No mod code changed, so `herdr-app check` and
   live UI inspection were not run. Installed-plugin discovery of the new
   reference after an update was not exercised.
+
+## Issue 16: z-mode playbooks on hc — 2026-10-31
+
+Added the [playbook table](../skills/hc-workflow/references/playbooks.md), linked
+from the hc companion and from operations' pause and pickup section. It maps
+each delegation, pause, pickup and cleanup step of the ten listed playbooks to
+an hc operation and record fields, or marks it direct. The zstack playbook text
+is not copied. No mod code changed.
+
+### Checks
+
+- The ten playbooks were read from installed zstack 0.24.0. Their step numbers
+  were diffed against the installed Codex 0.23.0 cache. Only pause-safely and
+  session-pickup differ, in their companion links and Herdr record list; the
+  step numbers match.
+- A scripted check found 37 table rows covering all ten playbooks, with no
+  missing or extra names. Every relative link in the changed files resolves.
+- Each delegating point in the inventory's ten playbook rows was matched to a
+  row by hand. The table's coverage section lists the matches.
+- `node --test mods/*/*.test.mjs workflows/*.test.mjs scripts/*.test.mjs`
+  passed (79 tests). `herdr-app check mods/task-evidence` passed.
+  `git diff --check` passed.
+
+### Interrogation fixes
+
+An interrogation with two Claude subagents and one Codex seat (`openai`,
+`gpt-6.1-sol`) found five defects. Each was rerun in a clean worktree and
+reproduced:
+
+1. Owner-merge rows asked a finished owner to act after Accept. Accept now
+   leaves the writer finished; merge, restack and fix rounds go to a
+   **Successor** that replaces the index entry.
+2. The PR-head gate compared only the commit. A **Head check** now requires a
+   clean owner worktree at the PR head before Accept, and `acceptanceStatus`
+   plus the live head before acting.
+3. A restack that kept its patch-id could not release dependents. The
+   Successor is accepted at the new head with the patch-id comparison as its
+   check.
+4. A whole-wave barrier contradicted orchestrate's rolling window. A finished,
+   recorded member's index entry is now replaced while the others run.
+5. The feature row required two or more workers. It now allows 1–3.
+
+A scratch probe against the real helpers reproduced the new orders first. The
+test `a Successor replaces a finished owner and is accepted at the restacked head`
+in `workflows/roster.test.mjs` now keeps them checked. It uses a throwaway Git
+repository and no hc terminals. It covers four things:
+
+- A clean owner worktree at the PR head yields the same digest as a fresh
+  detached checkout of that head.
+- A Successor overlapping its predecessor in one index is refused, and
+  replacing the index entry is accepted.
+- The predecessor's receipt stays `accepted` after the replacement.
+- A restack with an unchanged `git patch-id --stable` makes the old receipt
+  `stale`, while the Successor is accepted at the new head.
+
+A dirty owner worktree at the PR head failed the Head check's status command
+in the probe. That proves the helpers allow these orders. It does not prove a
+live merge or restack.
+
+`node --test mods/*/*.test.mjs workflows/*.test.mjs scripts/*.test.mjs` passed
+(80 tests). `herdr-app check mods/task-evidence` passed. `git diff --check`
+passed.
+
+### Live orchestrate pilot — merge-ready
+
+The user selected Herdr and authorized dispatch, a push and a PR, but no merge.
+They also authorized folder trust for the owner's worktree only. Coordinator:
+Claude Code (Opus 5.5) at `t16` on `zachs-macbook-pro`, hc 0.1.16 core and CLI.
+Preflight reported `session.status: supported`; no role templates were
+installed. Run index: `herdr-zstack/.herdr-tasks/pilot-16/run.json`.
+
+The unit linked the seats reference from `docs/installation.md`, a real gap on
+`main`. It ran in its own worktree,
+`~/.cache/herdr-zstack/pilot-16/unit-1`, on branch
+`pilot16/installation-seats-link` from `origin/main` `bc8f91e`.
+
+| Step | Table row | Observation |
+|---|---|---|
+| Launch owner, attempt 1 | orchestrate · line 4 | `t1v`, Claude Code 2.1.316. `--allowedTools` is variadic and swallowed the trailing task argument: `hc get` showed the task as the last rule, and the screen stayed at turn 0. The task was never delivered. Evidence was saved; the terminal was killed, confirmed `finished` (exit 129) and removed. |
+| Launch owner, fresh assignment | orchestrate · line 8 | `t1w`, with `--permission-mode dontAsk` placed after the rules. The task arrived once. No trust dialog appeared, and `~/.claude.json` recorded no trust for the path. Binding: core ID plus core PID start time, terminal `zachs-macbook-pro/t1w`, occupant PID 60922 plus start time and executable. |
+| Owner work | orchestrate · line 7 | The owner used exact `--allowedTools` rules for each command. It committed `24b47eb`, pushed, and opened [#27](https://github.com/fullerzz/herdr-zstack/pull/27). Its report arrived as `<hc from="t1w pilot-16-unit-1">`. |
+| Freeze and Head check | orchestrate · line 11 | Identity rechecked, then `hc kill t1w` and `state: finished`. `git rev-parse HEAD` equalled the PR's `headRefOid` (`24b47eb…`), and the status command excluding `.herdr-tasks` printed nothing. |
+| Other-family seat | orchestrate · line 11 | `t1x`, Codex 0.166.0, screen `GPT-6.1-Sol xhigh`, with every MCP server disabled and a `workspace-write` sandbox rooted at the seat directory. Before launch, a touch probe succeeded in the seat directory and was refused in its evidence directory and in the owner's worktree. No trust dialog appeared, because the seat ran inside the already-trusted checkout. The seat ran all five required checks with exit 0 and reported `VERDICT: PASS` at `24b47eb`. |
+| Accept | orchestrate · lines 15–16 | The seat was stopped; the reviewed checkouts were unchanged, and the seat directory held only `report.md`. `recordMemberAcceptance` accepted `unit-1` at `{commit: 24b47eb…, worktreeDigest: sha256:fb3fe9a9…}`, with the coordinator checks and the seat report as evidence. It accepted `unit-1-seat` at the coordinator checkout's snapshot. |
+| Head check, later half | autopilot-full · 4–5 | `acceptanceStatus` against a fresh `observeRevision` returned `accepted`, and the live `headRefOid` equalled `receipt.revision.commit`. |
+| Account and clean up | orchestrate · lines 18, 21 | Evidence was saved before `hc rm t1w` and `hc rm t1x`. `hc ls --all --label run=pilot-16` then listed no terminals. Both records were set to `activity: completed`. |
+
+PR #27 reached merge-ready at its accepted head, `MERGEABLE` with green CI.
+The pilot launched no Successor. The user then separately authorized a merge.
+The coordinator first confirmed that `acceptanceStatus` was still `accepted`
+and that the live head still equalled the receipt. It then merged directly
+with `gh pr merge 27 --squash --match-head-commit 24b47eb…`, which produced
+`8f357a7` on `main`. The cubic bot appended its own
+summary to the PR body after the owner's text. The owner worktree is kept for
+review.
+
+### Not yet proven
+
+- The Successor merge and restack paths have run only in tests, not live.
+- Pause and pickup rows reuse the fixture-tested `pausePlan` and `reconcile`
+  decisions from issue 4. No live pause or pickup ran for this issue.
