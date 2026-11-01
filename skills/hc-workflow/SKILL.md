@@ -20,6 +20,12 @@ When the selected workflow is zstack's `swarm`, also apply the
 [swarm addendum](../swarm/SKILL.md) for fan-out, drain and race cancellation.
 It supplements the installed zstack skill; it does not replace it or add workers.
 
+When the selected z-mode playbook is orchestrate, autopilot-full,
+autopilot-stack, autonomous-run, bug-fix, feature, refactoring, pause-safely,
+session-pickup or worktree-cleanup, use the [playbook table](references/playbooks.md)
+to map each delegation, pause, pickup and cleanup step to hc operations and
+record fields. Steps it marks direct stay direct.
+
 When the selected workflow needs a seat from another model family, such as
 arena's judge or interrogate's other-provider adversary, also apply
 [seats](references/seats.md). It replaces only the native one-shot seat launch

@@ -35,6 +35,7 @@ hc run --bg --json --name <run>-<task> --cwd <checkout> \
 - Put the task in the launch argv. A message sent to a booting agent can be dropped.
 - When `hc templates` lists an installed herdr-zstack role (`z-agent-claude`, `z-agent-codex`, `comment-sicko-claude`, `comment-sicko-codex`), pass its name in place of `<cli and flags>`. The template supplies the role and report rules. The task must still give the absolute z-mode `SKILL.md` path, the coordinator's literal address, the task ID and any report path. With a template, hc sends the role and task as the first message once the agent is ready, and the response includes `first_message`. See [installation](../../../docs/installation.md#hc-role-templates).
 - Launch the CLI directly, not through `env` or a shell wrapper. hc must see the agent to report its status and first-message delivery.
+- Claude's `--allowedTools` takes a variable number of values. Put another option after the last rule and before the task. Otherwise the task becomes a rule and the agent starts with no task. hc 0.1.16 with Claude Code 2.1.316 showed this.
 - Codex needs `--no-daemon`. Never use one-shot print modes or auto-approval flags.
 - Save the full JSON response. When it has `first_message`, check `first_message.sent`. If it is false, the task was not sent: run `hc read <t>` and resolve readiness, such as a trust dialog, before sending once. If the field is absent, or the response is a timeout or transport error, delivery is unknown. Read the screen before any input.
 - With hc 0.1.15 and a direct argv task, the response had no `first_message` field. Read the screen to confirm the prompt arrived once.
@@ -79,4 +80,4 @@ Use `herdr-app` only when the user asks to see or arrange the workers. Follow `h
 
 ## Pause and pickup
 
-Apply `pausePlan` and `reconcile` to each member separately. Each member keeps its own binding. An unbound or unavailable member blocks only its own resumption. Never replay any member's brief automatically. Save the coordinator address, the run index path and each member's state in the handoff.
+The pause-safely and session-pickup rows of the [playbook table](playbooks.md) list the exact hc operations and handoff fields. Apply `pausePlan` and `reconcile` to each member separately. Each member keeps its own binding. An unbound or unavailable member blocks only its own resumption. Never replay any member's brief automatically. Save the coordinator address, the run index path and each member's state in the handoff.

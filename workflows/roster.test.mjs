@@ -232,3 +232,101 @@ test('members must have distinct resolved task-record paths', async () => {
     assert.equal(JSON.parse(await readFile(runPath(run))).sequence, 1);
   } finally { await rm(checkout, { recursive: true, force: true }); }
 });
+
+test('a Successor replaces a finished owner and is accepted at the restacked head', async () => {
+  const { observeRevision } = await import('../records/task-record-store.mjs');
+  const { acceptanceStatus } = await import('../mods/task-evidence/task-record.js');
+  const base = await mkdtemp(join(tmpdir(), 'hc-successor-'));
+  const git = (cwd, ...args) => execFileSync('git', ['-C', cwd, ...args], { encoding: 'utf8' }).trim();
+  try {
+    const origin = join(base, 'origin');
+    await mkdir(origin);
+    git(origin, 'init', '-q', '-b', 'main');
+    git(origin, 'config', 'user.email', 'test@example.invalid');
+    git(origin, 'config', 'user.name', 'test');
+    await writeFile(join(origin, 'a.txt'), '1\n');
+    git(origin, 'add', '.');
+    git(origin, 'commit', '-qm', 'base');
+    const checkout = join(base, 'owner');
+    git(origin, 'worktree', 'add', '-q', '-b', 'unit', checkout);
+    await writeFile(join(checkout, 'a.txt'), '2\n');
+    git(checkout, 'commit', '-qam', 'unit');
+    const prHead = git(checkout, 'rev-parse', 'HEAD');
+
+    const coordinator = join(base, 'coordinator');
+    await mkdir(join(coordinator, '.herdr-tasks', 'run-1'), { recursive: true });
+    const owner = taskId => member(taskId, ['a.txt'], checkout);
+    const worker = n => ({ core: 'core-1', terminal: `t${n}`, occupant: `pid-${n}` });
+    for (const [n, taskId] of [[1, 'own-1'], [2, 'own-2']]) {
+      await mkdir(join(checkout, '.herdr-tasks', taskId), { recursive: true });
+      await writeRecord(recordPath(owner(taskId)), { schemaVersion: 1, sequence: 1, taskId, coordinator: 'parent',
+        machine: 'local', checkout, owner: `worker-${taskId}`, scope: 'a.txt', activity: 'active', worker: worker(n),
+        revision: null, brief: 'brief.md', handoff: 'handoff.md', artifacts: [], receipt: null }, { writer: 'parent' });
+    }
+    const finished = (taskId, n, snapshot) => ({ [taskId]: { machine: 'local', checkout, worker: worker(n),
+      reachable: true, state: 'finished', ...snapshot } });
+    const accept = (run, taskId, n, snapshot) => recordMemberAcceptance(run, taskId, { writer: 'parent',
+      observedByTask: finished(taskId, n, snapshot), before: snapshot, after: snapshot,
+      checks: [{ command: 'node check.mjs', exitCode: 0, evidence: 'check.log' }] });
+    const status = (record, snapshot) => acceptanceStatus(record, { machine: 'local', checkout, ...snapshot });
+
+    // Head check: a clean owner worktree at the PR head yields the PR head's own snapshot.
+    let run = { schemaVersion: 1, sequence: 1, runId: 'run-1', coordinator: 'parent', machine: 'local',
+      checkout: coordinator, members: [owner('own-1')] };
+    await writeRun(runPath(run), run, { writer: 'parent' });
+    assert.equal(git(checkout, 'status', '--porcelain', '--untracked-files=all', '--', '.', ':(exclude).herdr-tasks'), '');
+    const accepted = await accept(run, 'own-1', 1, await observeRevision(checkout));
+    const fresh = join(base, 'fresh');
+    git(origin, 'worktree', 'add', '-q', '--detach', fresh, prHead);
+    assert.equal(accepted.receipt.revision.commit, prHead);
+    assert.equal(accepted.receipt.revision.worktreeDigest, (await observeRevision(fresh)).worktreeDigest);
+
+    // The Successor cannot share the index with its predecessor, so it replaces that entry.
+    assert.match(validateRun({ ...run, sequence: 2, members: [owner('own-1'), owner('own-2')] }).join(), /overlaps/);
+    const next = { ...run, sequence: 2, members: [owner('own-2')] };
+    await writeRun(runPath(next), next, { writer: 'parent', expectedSequence: 1 });
+    run = next;
+    assert.equal(status(accepted, await observeRevision(checkout)), 'accepted');
+
+    // A restack keeps the patch-id but moves the head: the old receipt goes stale, the Successor is accepted.
+    const patchId = () => execFileSync('git', ['patch-id', '--stable'],
+      { input: git(checkout, 'show', 'HEAD'), encoding: 'utf8' }).split(' ')[0];
+    const before = patchId();
+    await writeFile(join(origin, 'b.txt'), 'b\n');
+    git(origin, 'add', 'b.txt');
+    git(origin, 'commit', '-qm', 'parent moved');
+    git(checkout, 'rebase', '-q', 'main');
+    assert.equal(patchId(), before);
+    const restacked = await observeRevision(checkout);
+    assert.equal(status(accepted, restacked), 'stale');
+    assert.equal(status(await accept(run, 'own-2', 2, restacked), restacked), 'accepted');
+  } finally { await rm(base, { recursive: true, force: true }); }
+});
+
+test('the Head check compares digests because index flags hide edits from git status', async () => {
+  const { observeRevision } = await import('../records/task-record-store.mjs');
+  const base = await mkdtemp(join(tmpdir(), 'hc-head-check-'));
+  const git = (cwd, ...args) => execFileSync('git', ['-C', cwd, ...args], { encoding: 'utf8' }).trim();
+  try {
+    const owner = join(base, 'owner');
+    await mkdir(owner);
+    git(owner, 'init', '-q');
+    git(owner, 'config', 'user.email', 'test@example.invalid');
+    git(owner, 'config', 'user.name', 'test');
+    await writeFile(join(owner, 'a.txt'), '1\n');
+    await writeFile(join(owner, 'b.txt'), '1\n');
+    git(owner, 'add', '.');
+    git(owner, 'commit', '-qm', 'head');
+    const head = git(owner, 'rev-parse', 'HEAD');
+    const fresh = join(base, 'fresh');
+    git(owner, 'worktree', 'add', '-q', '--detach', fresh, head);
+    assert.equal((await observeRevision(owner)).worktreeDigest, (await observeRevision(fresh)).worktreeDigest);
+    git(owner, 'update-index', '--assume-unchanged', 'a.txt');
+    git(owner, 'update-index', '--skip-worktree', 'b.txt');
+    await writeFile(join(owner, 'a.txt'), '2\n');
+    await writeFile(join(owner, 'b.txt'), '2\n');
+    assert.equal(git(owner, 'status', '--porcelain', '--untracked-files=all'), '', 'status hides both edits');
+    assert.equal(git(owner, 'rev-parse', 'HEAD'), head);
+    assert.notEqual((await observeRevision(owner)).worktreeDigest, (await observeRevision(fresh)).worktreeDigest);
+  } finally { await rm(base, { recursive: true, force: true }); }
+});
