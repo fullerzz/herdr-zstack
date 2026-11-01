@@ -31,6 +31,25 @@ The observer always emits a SHA-256 digest, even when Git reports a clean checko
 
 Updates acquire an exclusive sibling `.lock`, validate the existing record and sequence, fsync a uniquely named temporary file, then rename it over the record. Readers see the old or new complete JSON. A stale writer or concurrent writer fails; reconcile and retry deliberately. A crash may leave a lock/temp file; inspect ownership before manually removing it, never automatically steal locks. Atomic rename is a local filesystem visibility guarantee, not a distributed lock or a guarantee against storage loss after power failure. The writer string is an authority assertion by the calling coordinator, not authentication; filesystem permissions and execution scope enforce access. The UI imports only the pure helper and never calls this writer or observer.
 
+## Task board
+
+The board is one user-level file, normally `~/.local/state/herdr-zstack/board.json`, that lists the tasks for Task & Evidence to show. It is shared by every coordinator on this computer:
+
+```json
+{ "schemaVersion": 1, "sequence": 4, "tasks": [
+  { "label": "fix-1 · herdr-zstack", "record": "/work/herdr-zstack/.herdr-tasks/fix-1/task.json", "machine": null },
+  { "label": "roster-pilot", "run": "/work/pilot/.herdr-tasks/roster-pilot/run.json", "machine": null }
+] }
+```
+
+Each entry has a `label` and exactly one absolute `record` or `run`. `machine` routes the entry's reads, and null means this computer. The board holds at most 50 entries, and no two can share the same target kind (`record` or `run`), path and machine. `validateBoard` and `readBoard` in `mods/task-evidence/board.js` have no host imports. The board says where to read. It never states activity, ownership or acceptance.
+
+`updateBoard(path, change)` in `records/task-record-store.mjs` creates the parent folder. It holds the board's `.lock`, rereads and validates the current board, and applies `change(tasks)`. Then it writes the next sequence atomically. A busy lock is retried for about a second and never stolen. A malformed board is refused, not repaired.
+
+`scripts/task.mjs` is the coordinator's command-line interface for its own task. `start` writes `brief.md`, `status.md` and a sequence 1 record. The record names the coordinator as owner, with no worker binding, revision or receipt. Then `start` adds the record to the board, newest first. `note` updates the status file's latest line and its newest-first log. `artifact` appends an evidence path to the record. `finish` records `activity: completed`, which is reported activity, never acceptance. `board add` and `board remove` manage entries for run indexes and other records. Only the recorded coordinator, `$HC_TERMINAL_ID` by default, may update a task. The CLI never runs hc, binds workers, observes revisions or writes receipts.
+
+`start` validates required text, including the label and coordinator, before exclusively creating the task folder and writing evidence. A concurrent start or an existing folder is refused, even if `task.json` is absent. An I/O failure after creation leaves partial files for inspection; use a new task ID or reconcile those files before retrying.
+
 ## Run index for a roster
 
 A roster of two or three workers keeps one schema 1 record per worker (decision D4). The coordinator also owns `.herdr-tasks/<run-id>/run.json` in its checkout. `records/fixtures/run.json` shows the format:

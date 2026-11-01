@@ -1262,3 +1262,47 @@ The main window initially showed the migration manual-mode configuration and an 
 Computer-use clicks in the main Herdr window verified three asynchronously loaded members, per-member activity and binding text, and saved accepted receipts remaining explicitly unverified. Selecting qa-b loaded its brief; scrolling metadata left the document visible; clicking receipt evidence loaded checks.md. Removing qa-a from the fixture index and editing qa-b's brief, then clicking Refresh, displayed two members and the updated brief. Refresh reset the selected artifact to the brief. No blocking defect appeared in this pass.
 
 All 37 panel tests and the native checker passed with native service access (exit 0); git diff --check passed. The original personal-task-evidence layout was restored with no app errors. The updated runtime and reusable qa18-sidebar clone remain installed. No agents or terminals were launched. Automatic core-event refresh, remote operation, and keyboard accessibility were not re-exercised in this main-window pass; earlier isolated evidence above is separate coverage.
+
+## Task creation concurrency regression — 2026-11-01
+
+Two new regression tests failed against the original task CLI: concurrent starts could pair one coordinator's record with another's brief, and a start could overwrite an existing partial task's brief. `start` now claims the task directory with non-recursive `mkdir` before writing evidence, refusing existing directories and preserving partial starts for inspection.
+
+After the fix, `node --test` passed all 113 tests (exit 0), including concurrent same-ID starts and preservation of partial-task evidence. `git diff --check` passed. Tests used disposable repositories; no personal board or live panel interaction was exercised for this CLI-only fix.
+
+## Coordinator task tracking on a shared board — 2026-11-01
+
+z-mode coordinators running under Herdr now record their own task with `scripts/task.mjs`. A `board` prop lets Task & Evidence list those tasks and reread them as files change.
+
+### Live main-window inspection — PASS after two fixes
+
+With the user's authorization, `node scripts/install.mjs update --apply` installed the runtime (`main.js`, `board.js`). The `personal-task-evidence` layout's Task & Evidence block gained `"board": "/Users/zachfuller/.local/state/herdr-zstack/board.json"`; its other props are unchanged. The app hot-reloaded each runtime update. `herdr-app status` reported no errors after every step. Evidence comes from `herdr-app shot` screenshots; no clicks were made.
+
+| Step | Observed |
+|---|---|
+| First load, board folder absent | `Not watching the board (… No such file or directory)`. The first `start` would have needed a Refresh. **Fixed:** the panel now watches the folder's parent until the board folder exists. |
+| `start` a disposable task, `hc label t16 task=…` | The panel listed the task with `active (reported)` and `Acceptance: unverified`. It opened on the brief, and the labelled terminal was not shown. **Fixed:** board tasks open on their status file, and single tasks list their labelled terminals: `t16 · live · working`. |
+| `note`, then `finish`, with no reinstall or Refresh | The status file and record reread automatically: `Now: Finished: Live QA passed.`, a newest-first log, and `completed (reported)`. |
+| Remove the board entry and the task folder | First run: `Task record missing.` A task reread triggered by the folder change landed after the fallback to manual mode. **Fixed:** the fallback now discards task reads still in flight. Rerun: the panel returned to the layout's manual-mode notes with `Board: 0 tracked tasks`. |
+| Delete the board folder, remount, then `start` | `Board has no tracked tasks yet.` with no watch error; the task appeared without a Refresh. |
+
+Cleanup removed both disposable tasks from the board and from `.herdr-tasks/`, and cleared the `task` label on t16. The board file remains with no tasks.
+
+### Checks and limits
+
+`node --test` passed all 111 tests. They cover board validation, the CLI's commands, coordinator-only updates, eight concurrent board updates, and the panel's board read. They also cover selection keeping, the fallback race, rereads triggered by the evidence folder, and the board-parent watch. `herdr-app check mods/task-evidence` and `git diff --check` passed.
+
+Not exercised: remote board entries, which do not watch files; a real z-mode coordinator following the skill end to end; rosters added with `board add --run`; and keyboard accessibility. The layout's `space` still points at the migration space, so `LIVE ACTIVITY` shows no agents for this space. Labelled terminals are the board's activity source.
+
+### Interrogation fixes and integrated verification — 2026-11-01
+
+Two independent `gpt-6.1-sol` workers (medium effort) fixed the verified findings with disjoint source ownership. Board selection now preserves whether the selected row came from the layout or board, so a matching pinned record does not disable the board task's evidence watcher after a board update. The CLI rejects blank labels and coordinator identities before claiming the task folder, so corrected retries succeed without manual cleanup.
+
+The coordinator inspected both changes after freezing the workers. `node --test` passed all 117 tests (exit 0); the panel subset passed 48 tests. The original interrogation repros also passed all three cases with only their import paths adjusted to the current checkout: both invalid-input cases left no files and retried successfully, and the duplicate-selection case retained `Task a` with `taskWatchAlive: true`. The new panel regression additionally exercises two board reorders followed by status changes and checks the updated text each time. `git diff --check` passed.
+
+`herdr-app check mods/task-evidence` passed with native service access (exit 0). The worker's sandboxed checker hung on macOS service access; its identified process was stopped, and that attempt provides no passing evidence. The running personal layout reported no errors, but the updated runtime was not installed there during this fix pass. Live GPUI selection/refresh, remote behavior, and keyboard accessibility were not re-exercised; earlier live-board observations above remain separate evidence.
+
+### PR review: roster evidence across worktrees — 2026-11-01
+
+The panel now watches each local board roster member's evidence folder as well as the index folder. Subscriptions are deduplicated and reconciled as membership changes; notifications from removed folders and previous selections are ignored. Remote rosters remain unwatched locally.
+
+After freezing the `gpt-6.1-sol` worker, the coordinator reviewed the patch and ran `node --test`: all 120 tests passed (exit 0). The three added harness tests cover record/status refresh across checkouts with unchanged terminal facts, selection retention, membership changes, shared folders, missing records, stale notifications and remote exclusion. Fixtures use CLI-shaped `.herdr-tasks/<task-id>/status.md` paths. `herdr-app check mods/task-evidence` passed with native service access (exit 0), and `git diff --check` passed. The watcher is stubbed in the harness; this pass did not install the runtime or inspect live GPUI behavior.
