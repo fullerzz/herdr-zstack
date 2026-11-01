@@ -51,7 +51,7 @@ The explicit operator workflow and pure lifecycle helpers implement launch-once 
 
 The live pilot supplies process accounting and a final handoff for both owned attempts: neither remains a writer, acceptance is bound to the tested dirty revision, and pickup explicitly requires fresh authority and process-start evidence with no replay. It does not supply a live interruption/resumption or restart test.
 
-Limits: app closure, core restart and remote failure were simulated, not induced on the user's runtime. No live host-persistence claim is made. Issue 4's implementation and fixture coverage are complete; live restart/persistence acceptance remains unverified and must use isolated task-owned runtime state. See [recovery checks and proof limits](worker-lifecycle.md#recovery-checks-and-proof-limits).
+Limits: app closure, core restart and remote failure were simulated, not induced on the user's runtime. No live host-persistence claim is made. Issue 4's implementation and fixture coverage are complete. Issue 17 later supplied [live local restart evidence](#issue-17-supporting-processes-and-live-restart-recovery--2026-11-01) in an isolated session; remote recovery remains unverified. See [recovery checks and proof limits](worker-lifecycle.md#recovery-checks-and-proof-limits).
 
 ## Issue 5: task-connected panel — 2026-10-31
 
@@ -1147,3 +1147,64 @@ probe file name and the usage guard.
 - The uncommitted issue #15 edits were present in the reviewed checkout. The
   brief marked them out of scope. The snapshot shows the checkout outside
   `.herdr-tasks` unchanged; it does not cover `.herdr-tasks` itself.
+
+## Issue 17: supporting processes and live restart recovery — 2026-11-01
+
+Herdr execution and z-mode were selected for this session. Installed versions: hc 0.1.16, user core 0.1.16, herdr-app 0.1.11 and zstack 0.24.0. All are newer than the contract baseline. Preflight reported `session.status: supported` for caller `t16`. No agent was launched. Every hc terminal below ran in an isolated core, so the user's core received no launch, signal or restart.
+
+### Isolated session
+
+- `HC_SESSION=i17`. `XDG_STATE_HOME`, `XDG_RUNTIME_DIR`, `XDG_CONFIG_HOME`, `XDG_DATA_HOME` and `XDG_CACHE_HOME` pointed under `.herdr-tasks/i17/x/`. `HC_TERMINAL_ID`, `HC_TERMINAL_SOCKET`, `HC_SOCKET` and `HC_SCOPE` were unset. The terminals were therefore parentless, except for the deliberate `--parent` probe.
+- The first attempt failed closed. hc refused with `the socket path for session "issue17" is too long here (108 bytes; this system allows 103)`. Shorter paths fixed it.
+- The isolated core had ID `b70d937978abe24a15bd50acf525a51a` and its socket was `.herdr-tasks/i17/x/r/herdr-core/i17.sock`. The user's core has ID `d69141182c390e697d361b31591615ed`, PID 29654 and a start time of `Sat Oct 31 15:21:50 2026`. Every isolated stop or restart first checked the isolated `core.id`. After cleanup, preflight still reported the user core with the same ID and PID, and `ps` showed the same start time.
+
+### Supporting processes — PASS
+
+| Check | Observation |
+|---|---|
+| Readiness | `hc run --bg --keep --name srv … sh -c '…; sleep 2; echo SERVER READY; exec sleep 3600'` returned `t1`. `hc wait srv --output "SERVER READY" --timeout 30` returned `reason: output`. |
+| Late wait | A second `--output` wait for the same, already printed text returned `reason: timeout` after 3 s, while `hc read` showed `SERVER READY`. `--output` matches only new output. |
+| Background exit | `chk` ran `exit 3`. `hc wait` returned `reason: exit, exit_code: 3`. `hc get` kept `exit_code: 3, reason: exited, finished_ms` after the exit. |
+| Foreground exit | `hc run --timeout 30 sh -c 'echo fg; exit 4'` printed `[hc] t3 exited (exit 4)` and exited 4. |
+| Foreground timeout | `hc run --timeout 3 --name slow …` printed `[hc] still running as t4` and exited 124. `hc wait slow` later collected `exit_code: 0` with no relaunch. |
+| `watch-pr` | The first launch, `t5`, stopped at mise's "config files in ~ are not trusted" prompt, because the scratch XDG paths reached the terminal. hc showed no `blocked` status for this plain program. The prompt was not answered. `hc kill t5` gave `reason: killed, signal: 1, exit_code: null`. The relaunch, `t6`, ran under `env -u XDG_CONFIG_HOME -u XDG_DATA_HOME -u XDG_STATE_HOME -u XDG_CACHE_HOME -u XDG_RUNTIME_DIR <zstack>/skills/z-mode/scripts/watch-pr/watch-pr --pr 29 --status-only`, with this repository as cwd. It exited 0, and its single NDJSON line was `kind: STATUS, terminal: true, exitCode: 0` for merged PR 29. `--status-only` was used only to prove launch and exit collection without waiting on CI. |
+
+### Persistence and restart — PASS
+
+| Step | Observation |
+|---|---|
+| Binding before | Core PID 40281, started `Sun Nov  1 12:35:44 2026`. `t1`'s occupant was PID 43356 (`sleep`), started `12:36:00`. `srv-starts.log` had 1 line. |
+| `hc server restart` | The core PID changed to 64505. Holder 43355 and program 43356 survived. `t1` still ran `sleep 3600`. |
+| `hc server stop`, `start` | The holder and program were gone while the core was down. On start, the core PID was 67330 and `t1` was `live, keep: true`, with `argv: ["/bin/zsh","-l"]` and `reason: stopped_by_restart`. Its new occupant was `zsh` PID 67622. The screen showed a fresh login prompt in the same cwd, with the same address and labels. |
+| Nothing resent | `srv-starts.log`, which the original command appends to on every start, still had 1 line. It also had 1 line after a second stop and start. |
+| `reconcile` | `.herdr-tasks/i17/reconcile-live.mjs` passed these observations, with a real `observeRevision` snapshot, to `reconcile` and `pausePlan`. Before restart: `bound`, `current`, interrupt `[t1]`. After the graceful restart, where the core PID changed but the program survived: `unbound`, `unverified`, `resend: false`, no interrupt. After stop and start, with the kept shell: `unbound`, `unverified`, `resend: false`, no interrupt. `dispatchDecision({attempted: true})` returned `reconcile-only`. |
+| `--outlive-parent` | Parent `par` (`t7`) had children `cdef` (`t8`, the default) and `cout` (`t9`, `--outlive-parent`). After `hc kill par`, `cdef` finished with `die_with_parent: true, reason: killed, signal: 1`, and `cout` stayed live with `die_with_parent: false`. |
+| Core stop versus flags | During the next stop and start, unkept `nokeep` (`t10`) and the `--outlive-parent` child `cout` both finished with `reason: server_stop`. Kept `t1` returned as a shell again. |
+| Cleanup | `hc ls --all --label task=i17` listed only this run's terminals. `t1` was killed, `t1`–`t10` were removed, and `hc ls --all` returned `terminals: []`. The isolated core was stopped, and `pgrep -f i17` found no process. |
+
+Evidence lives under `.herdr-tasks/i17/`. It is local, temporary and ignored by Git: `01-start.txt`, `02-processes.txt`, `03-wait-and-watch.txt`, `04-watch-pr.txt`, `05-restart.txt`, `06-stop-start.txt`, `07-recovered.txt`, `08-reconcile.txt`, `09-outlive-parent.txt`, `10-nokeep-stop-start.txt` and `11-cleanup.txt`.
+
+### Checks and limits
+
+- `node --test mods/*/*.test.mjs workflows/*.test.mjs scripts/*.test.mjs` passed (81 tests). `herdr-app check mods/task-evidence` and `git diff --check` passed. Every relative link and anchor in the changed files resolves. No mod changed, so no live UI inspection was needed.
+- Only the local macOS host was tested. Remote machines, Linux, where systemd stops the core before its holders, and host shutdown were not tested.
+- The binding's core component is core ID plus core process start time, which the coordinator observed. hc exposes no restart epoch. A graceful restart therefore unbinds a surviving program too. This fails closed; the operator collects its output and re-inspects identity before any control.
+- Grace-delay recovery after a program dies by signal, without a core restart, was not induced.
+- Only plain programs ran. No agent was kept or restarted. The claim that a kept agent returns as a shell rests on hc's manual and on this shell observation.
+- Scratch XDG paths change tool behaviour inside terminals, as mise did here. This affects isolated tests only. Terminals in the user's core inherit the user's environment.
+
+### Interrogation — 2026-11-01
+
+Run `int-17` ran three adversaries against this change, each in its own detached worktree. All three were hc terminals parented to the coordinator `t16`.
+
+| Member | Identity and sandbox | Result |
+|---|---|---|
+| `int-17-a1` | Codex 0.166.0, `GPT-6.1-Sol xhigh` from the status line, which is a different family from the coordinator. `workspace-write`, network restricted, MCP servers, apps and plugins disabled. Writable roots were its worktree and seat directory only. | ISSUES. One finding: `docs/roadmap.md:3` still said "M5–M8 remain planned", and `skills/hc-workflow/references/playbooks.md:80` still said "Processes, including a PR watcher, are untested until M5". Its repro `adv/coverage.mjs` exited 1 again in a fresh coordinator worktree. Links, watch-pr exit codes and reconcile matched the docs. The full suite was BLOCKED: 80 passed, and 1 failed with `listen EPERM` on a fixture socket inside its sandbox. |
+| `int-17-a2`, `int-17-a3` | Claude Code 2.1.316 writing seats | Incomplete. Each stopped at a prompt to read its own brief outside the worktree. Both were killed and removed before writing anything. |
+| `int-17-a2r`, `int-17-a3r` | The same seats with `--allowedTools Read Grep Glob`, Opus 5.5, Claude sandbox. The only Unix socket allowed was each seat's own isolated core socket. | BLOCKED. Each isolated core started, but every `hc run` failed with `no holder: holder did not start within 5 s`, and `holder.log` showed `Operation not permitted`. No live hc claim was exercised. The non-hc checks found nothing: reconcile, the watch-pr exit-code table, and 8 of 8 lifecycle tests passed. |
+
+Fixes: the roadmap status and the playbook limit now match the implementation. [Seats](../skills/hc-workflow/references/seats.md#4-launch-a-claude-seat) adds the Read rules for writing Claude seats, the holder limitation, and the inline isolation rule.
+
+Isolation incident: both Claude seats wrote their isolation exports to `adv/env.sh` with a heredoc. In their sandbox, a mise-shimmed or aliased `cat` left the file at 0 bytes. The coordinator approved one command that sourced it before noticing. That command and a few others ran hc without isolation. Claude's sandbox refused all of them with `cannot start core: Operation not permitted`, rc 5, because the user's core socket was not allowed. Afterward, the user's core still reported ID `d69141182c390e697d361b31591615ed`, PID 29654 and an unchanged uptime. The coordinator rejected the next prompt that sourced the file and approved hc commands only with the isolation variables inline.
+
+Limits: the live hc behavior in [supporting processes](../skills/hc-workflow/references/processes.md) rests on the coordinator's own run. No adversary reproduced it. The Claude adversaries' untested probes remain open: a foreground program that exits 124 by itself, a signal-killed foreground run, a program that traps HUP and exits 0 after `hc kill`, and a program that exits before printing its ready text.
