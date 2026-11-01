@@ -18,6 +18,6 @@ This repository owns Herdr-specific execution workflows, mods, layouts, and runt
 
 Keep mods under `mods/`. Keep tests beside the code they exercise. Add workflow skills and layouts only when implementing their actual behavior; no placeholder skill activation.
 
-Run `node --test mods/task-evidence/*.test.mjs`, `herdr-app check mods/task-evidence`, and `git diff --check` after relevant changes. Inspect the running UI after async reads, artifact selection, and refresh. Record actual host checks and their limits in `docs/validation.md`; a checker pass is not live UI proof.
+Run `node --test mods/task-evidence/*.test.mjs`, `herdr-app check mods/task-evidence`, `just check`, and `git diff --check` after relevant changes. Inspect the running UI after async reads, artifact selection, and refresh. Record actual host checks and their limits in `docs/validation.md`; a checker pass is not live UI proof.
 
 Keep generated `.d.ts`, `jsconfig.json`, error files, and local session state out of Git. Preserve license notices. Do not build a custom installer until the installation contract needs one.

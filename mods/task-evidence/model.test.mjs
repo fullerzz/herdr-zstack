@@ -33,6 +33,9 @@ test('record file roles and explicit choices preserve manual mode', async () => 
   assert.deepEqual(taskChoices({tasks:[null, 3, {record:'relative'}, {record:'/task.json'}]}),[{record:'/task.json'}]);
   assert.deepEqual(taskChoices({tasks:[{run:'/run.json'}, {run:'run.json'}, {record:'/t.json', run:'/r.json'}, {record:'/t.json', run:'r.json'}]}),[{run:'/run.json'}]);
   assert.deepEqual(taskChoices({run:'/run.json', machine:'server'}),[{label:'Roster', run:'/run.json', machine:'server'}]);
+  // A machine is absent, null (this computer) or a name, as on the board.
+  assert.deepEqual(taskChoices({tasks:[{record:'/a.json', machine:7}, {record:'/b.json', machine:' '}, {record:'/c.json', machine:null}, {record:'/d.json', machine:'server'}]}).map(t=>t.record),['/c.json','/d.json']);
+  assert.deepEqual(taskChoices({record:'/t.json', machine:{}}),[]);
   assert.deepEqual(recordFiles({checkout:'/repo',brief:'brief.md',handoff:'handoff.md',artifacts:['check.log'],receipt:{evidence:['receipt.md']}}).map(f=>f.path),['/repo/brief.md','/repo/check.log','/repo/receipt.md','/repo/handoff.md']);
   const live=[{address:'t1',space:'s',status:'done'}];
   assert.deepEqual(taskActivity({worker:{core:'c',terminal:'t1',occupant:'session'}},live).owned,[]);

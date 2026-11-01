@@ -1,0 +1,26 @@
+name: Type check
+on:
+  pull_request:
+    branches: [main]
+permissions:
+  contents: read
+jobs:
+  just-check:
+    # `just check` runs `herdr-app types`, and herdr-app ships only as an arm64
+    # macOS cask. It installs the current release, so the check follows the
+    # latest published Herdr API rather than any one developer's install.
+    runs-on: macos-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - name: Install just and herdr-app
+        # The runner image's cask index can predate the herdr-app cask.
+        run: |
+          brew update --quiet
+          brew install just
+          brew install --cask herdr-app
+          herdr-app --version
+      - run: just check

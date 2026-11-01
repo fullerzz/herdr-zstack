@@ -1,0 +1,26 @@
+{
+  "// why": [
+    "Type-checks the Task & Evidence mod for `just check`. The mod's own",
+    "jsconfig.json and gpui-kit.d.ts are generated and stay out of Git, so this",
+    "file mirrors the generated options. `just check` regenerates the",
+    "declarations with `herdr-app types` before it runs tsc.",
+    "",
+    "`strictNullChecks` stays off to match the runtime: a view assigns its",
+    "state in `init`, which TypeScript cannot treat as definite assignment.",
+    "`skipLibCheck` skips the generated host declarations, which this",
+    "repository cannot fix."
+  ],
+  "compilerOptions": {
+    "target": "ES2022",
+    "module": "ES2022",
+    "moduleResolution": "bundler",
+    "lib": ["ES2022"],
+    "allowJs": true,
+    "checkJs": true,
+    "strict": true,
+    "strictNullChecks": false,
+    "skipLibCheck": true,
+    "noEmit": true
+  },
+  "include": ["mods/task-evidence/*.js", "mods/task-evidence/gpui-kit.d.ts"]
+}

@@ -2,6 +2,11 @@
 default:
     @just --list
 
+# Type-check the Task & Evidence mod against the installed Herdr API.
+check:
+    herdr-app types mods/task-evidence
+    npx --yes --package typescript@7.0.2 tsc -p tsconfig.json
+
 # Install or update sidebar mods, hc templates, and both host plugins.
 install: update-sidebar install-templates install-codex install-claude-code
 

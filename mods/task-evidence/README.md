@@ -22,7 +22,7 @@ Configure its block props:
 }
 ```
 
-`tasks` is an explicit list, never directory discovery. Each entry names exactly one absolute `record` or one absolute `run` index; an entry with both, or with neither, is ignored. `record: "/absolute/path/task.json"` at the top level is shorthand for one task, with top-level `machine`. A task entry's `machine` routes reads; null or omitted means this computer. Record contents describe their owning machine; they never select a read destination. Use the remote machine's paths and explicit routing for remote records. See the [schema](../../docs/task-record.md).
+`tasks` is an explicit list, never directory discovery. Each entry names exactly one absolute `record` or one absolute `run` index; an entry with both, or with neither, is ignored. `record: "/absolute/path/task.json"` at the top level is shorthand for one task, with top-level `machine`. A task entry's `machine` routes reads; null or omitted means this computer. `machine` must be absent, `null`, or a non-empty name; an entry with any other value is ignored. Record contents describe their owning machine; they never select a read destination. Use the remote machine's paths and explicit routing for remote records. See the [schema](../../docs/task-record.md).
 
 Select a task to read its record and brief. Select a file for its contents. Refresh clears the shown evidence, then rereads the selected task record or run index and its records, then the first file; manual mode rereads the selected file. Task and file reads are generation guarded, so late reads cannot replace a newer selection or refresh. Missing, malformed and unavailable records stay visible and clear earlier evidence. Missing/unreadable artifacts remain distinct from empty files. Host reads are limited to 1 MiB; successful reads show timestamps, not claims of current freshness.
 
@@ -32,7 +32,7 @@ Live activity is shown only for the explicit `space`, or one unique space matchi
 
 Manual mode remains available without `tasks`/`record`: configure `folder`, `notes`, optional `acceptance`, `handoff`, `decisions`, and `artifacts: [{label, path}]`. Paths are absolute or relative to an absolute folder. An unresolved explicit space without an explicit machine refuses manual reads. Markdown is displayed using the native read-only TextView.
 
-Run `node --test mods/task-evidence/*.test.mjs` and `herdr-app check mods/task-evidence`. The checker covers initial rendering only; live async navigation and refresh still need inspection. `place: none` avoids automatically changing a layout on installation.
+Run `node --test mods/task-evidence/*.test.mjs`, `herdr-app check mods/task-evidence`, and `just check`. The type check reads the JSDoc types for records, rosters, boards, and panel props. The checker covers initial rendering only; live async navigation and refresh still need inspection. `place: none` avoids automatically changing a layout on installation.
 
 ## Rosters
 

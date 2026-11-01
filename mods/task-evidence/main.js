@@ -6,20 +6,38 @@ import { filesFor, taskSpace, taskChoices, recordFiles, taskActivity } from "./m
 import { readMember, readRoster, rosterFacts, factKey } from "./roster.js";
 import { readBoard, boardKey, evidenceFolder, parentFolder } from "./board.js";
 import { parseDecisions, evidencePointers } from "./decisions.js";
+/** @import { AsyncContext, ClickEvent, Color, Context } from "gpui-kit" */
+/** @import { EvidenceFile, PanelConfig, TaskChoice } from "./model.js" */
+/** @import { RosterMember, RunIndex, TerminalFact } from "./roster.js" */
+/** @import { TaskRecord } from "./task-record.js" */
+/** @import { DecisionRow, MalformedRow } from "./decisions.js" */
+
+/** @typedef {{ text?: string | null, at?: string, error?: string }} Snapshot */
 
 export default class TaskEvidence extends View {
+  /** @param {unknown} _props @param {AsyncContext} cx */
   init(_props, cx) {
+    /** @type {PanelConfig} */
     this.config = props() ?? {};
+    /** @type {TaskChoice[]} */
     this.configured = taskChoices(this.config);
+    /** @type {TaskChoice[]} */
     this.tasks = this.configured;
+    /** @type {number} */
     this.taskIndex = 0;
+    /** @type {RunIndex | null} */
     this.roster = null;
+    /** @type {RosterMember[]} */
     this.members = [];
     this.memberIndex = 0;
+    /** @type {TaskRecord | null} */
     this.record = null;
+    /** @type {string | null} */
     this.recordState = null;
+    /** @type {EvidenceFile[]} */
     this.files = filesFor(this.config);
     this.selected = 0;
+    /** @type {Snapshot | null} */
     this.snapshot = null;
     this.loading = false;
     if (typeof this.config.board === "string" && this.config.board.startsWith("/")) this.watchBoard(cx);
@@ -31,6 +49,7 @@ export default class TaskEvidence extends View {
 
   // Reread the board whenever its folder changes. Board entries follow the
   // layout's own tasks; a selection survives while its entry remains.
+  /** @param {Context} cx */
   watchBoard(cx) {
     const token = this.boardWatch = {};
     cx.spawn(async cx => {
@@ -56,6 +75,7 @@ export default class TaskEvidence extends View {
     });
   }
 
+  /** @param {Context} cx @param {TaskChoice[]} boardTasks */
   applyBoard(cx, boardTasks) {
     const next = [...this.configured, ...boardTasks];
     if (JSON.stringify(next) === JSON.stringify(this.tasks)) return;
@@ -78,11 +98,14 @@ export default class TaskEvidence extends View {
 
   // A local board roster may keep its members in separate checkouts. Retain
   // unchanged subscriptions; removed folders and old selections lose authority.
+  /** @param {Context} cx @param {TaskChoice} choice @param {{ path: string }[]} [members] */
   watchTask(cx, choice, members = []) {
     const local = choice.board && !choice.machine;
     const key = local ? boardKey(choice) : null;
     if (key !== this.watchKey) {
+      /** @type {string | null | undefined} */
       this.watchKey = key;
+      /** @type {Map<string, object> | null} */
       this.taskWatch = null;
     }
     const watches = this.taskWatch ?? new Map();
@@ -108,6 +131,7 @@ export default class TaskEvidence extends View {
 
   // Manual refresh and task selection clear evidence first. A fact-driven
   // refresh (`keep`) leaves it visible and preserves the member and file.
+  /** @param {Context} cx @param {{ keep?: boolean }} [options] */
   loadTask(cx, { keep = false } = {}) {
     const choice = this.tasks[this.taskIndex];
     const machine = choice.machine ?? null;
@@ -123,7 +147,12 @@ export default class TaskEvidence extends View {
     cx.spawn(async cx => {
       // Facts seen before the read: a change during it differs and rereads again.
       const before = terminals();
-      let roster = null, members, state;
+      /** @type {RunIndex | null} */
+      let roster = null;
+      /** @type {RosterMember[]} */
+      let members;
+      /** @type {string} */
+      let state;
       if (choice.run) ({ run: roster, members, state } = await readRoster(readTextFile, choice.run, machine));
       else {
         const member = await readMember(readTextFile, choice.record, machine);
@@ -138,12 +167,14 @@ export default class TaskEvidence extends View {
       this.watchTask(cx, choice, members);
       this.recordState = state;
       this.recordAt = new Date().toLocaleTimeString();
+      /** @type {string | undefined} */
       this.factKey = factKey(rosterFacts({ runId: roster?.runId ?? null, members }, before, machine));
       this.selectMember(cx, keep ? Math.max(0, members.findIndex(m => m.taskId === shown.taskId)) : 0, keep ? shown.file : null);
       cx.notify();
     });
   }
 
+  /** @param {Context} cx @param {number} index @param {EvidenceFile | null} [selectedFile] File to keep selected. */
   selectMember(cx, index, selectedFile = null) {
     this.memberIndex = index;
     this.record = this.members[index]?.record ?? null;
@@ -158,6 +189,7 @@ export default class TaskEvidence extends View {
     if (this.record) this.load(cx, { keep });
   }
 
+  /** @param {Context} cx @param {{ keep?: boolean }} [options] */
   load(cx, { keep = false } = {}) {
     const file = this.files[this.selected];
     const request = this.request = (this.request ?? 0) + 1;
@@ -185,8 +217,10 @@ export default class TaskEvidence extends View {
     });
   }
 
+  /** @param {Context} cx */
   render(cx) {
-    const t = theme();
+    // The host declares theme() as plain strings; its colors are hex values.
+    const t = /** @type {Record<string, Color>} */ (theme());
     const choice = this.tasks[this.taskIndex];
     const facts = this.members.length ? rosterFacts({ runId: this.roster?.runId ?? null, members: this.members }, terminals(), choice?.machine ?? null) : null;
     if (facts && !this.reading && this.factKey !== undefined) {
@@ -199,10 +233,14 @@ export default class TaskEvidence extends View {
     const live = space ? agents().filter(a => a.space === space.id) : [];
     const activity = taskActivity(this.record, live);
     const file = this.files[this.selected];
+    /** @param {string} text */
     const heading = text => div().text_size(11).font_semibold().text_color(t.muted).child(text);
+    /** @param {string} id @param {string} text @param {(event: ClickEvent, cx: Context) => void} onClick */
     const action = (id, text, onClick, selected = false) => div().id(id).px(8).py(5).rounded(5)
       .bg(selected ? t.selected : t.raised).hover(s => s.bg(t.hover)).on_click(onClick).child(text);
+    /** @param {TerminalFact} term */
     const terminalLine = term => `${term.address}${term.role ? ` · role=${term.role}` : ""}${term.task && !this.members.some(m => m.taskId === term.task) ? ` · task=${term.task}` : ""} · ${term.state ?? "unknown"}${term.status ? ` · ${term.status}` : ""}`;
+    /** @param {RosterMember} member @param {number} index */
     const memberRow = (member, index) => {
       const record = member.record;
       const fact = facts?.members[index];
@@ -225,9 +263,11 @@ export default class TaskEvidence extends View {
     } else if (this.roster && !this.record) body = "The selected member has no readable record, so it has no evidence files.";
     // A decision log renders as rows; text without the exact header stays raw.
     const decisions = file?.label === "Decisions" && !this.loading && typeof this.snapshot?.text === "string" ? parseDecisions(this.snapshot.text) : null;
+    /** @param {number} index @returns {(event: ClickEvent, cx: Context) => void} */
     const select = index => (_event, cx) => { this.selected = index; this.load(cx); cx.notify(); };
+    /** @param {DecisionRow | MalformedRow} row @param {number} index */
     const decisionRow = (row, index) => {
-      if (row.malformed) return div().text_color(t.dim).child(`Malformed row: ${row.raw}`);
+      if ("malformed" in row) return div().text_color(t.dim).child(`Malformed row: ${row.raw}`);
       return v_flex().id(`decision-${index}`).gap(2).px(8).py(5).rounded(5).bg(t.raised)
         .child(div().text_size(10).text_color(t.dim).child(row.phase === "start" ? `── start · ${row.decision} · ${row.ts}` : `${row.ts} · ${row.phase}`))
         .when(row.phase !== "start", el => el.child(div().font_semibold().child(row.decision)))

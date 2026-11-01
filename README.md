@@ -23,9 +23,10 @@ Installation does not activate z-mode or Herdr execution. Task registration and 
 ```sh
 node --test mods/task-evidence/*.test.mjs
 herdr-app check mods/task-evidence
+just check
 ```
 
-Herdr supplies `gpui-kit`, `gpui-base`, and `herdr` at runtime; do not install them from npm. Read the generated `~/.config/herdr-app/AGENTS.md` and type definitions for the installed app version. The native checker covers initial rendering only: verify file navigation and refresh in the running app too.
+`just check` regenerates the mod's host declarations with `herdr-app types` and type-checks its JSDoc with TypeScript through `npx`. Herdr supplies `gpui-kit`, `gpui-base`, and `herdr` at runtime; do not install them from npm. Read the generated `~/.config/herdr-app/AGENTS.md` and type definitions for the installed app version. The native checker covers initial rendering only: verify file navigation and refresh in the running app too.
 
 ## Install locally
 

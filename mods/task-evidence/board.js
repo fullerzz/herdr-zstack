@@ -3,9 +3,34 @@
 // indexes. It lists where to read; it never states activity or acceptance.
 export const MAX_BOARD = 50;
 
+/** @import { TaskChoice } from "./model.js" */
+/** @import { ReadText } from "./roster.js" */
+
+/**
+ * @typedef {object} BoardEntry
+ * @property {string} label
+ * @property {string} [record] Exactly one of `record` and `run`, absolute.
+ * @property {string} [run]
+ * @property {string | null} [machine] The machine that owns the entry's files; null is this computer.
+ */
+
+/**
+ * The coordinator board, as accepted by `validateBoard`.
+ * @typedef {object} Board
+ * @property {1} schemaVersion
+ * @property {number} sequence
+ * @property {BoardEntry[]} tasks At most {@link MAX_BOARD}, unique by `boardKey`.
+ */
+
+/** @param {unknown} value */
 const text = value => typeof value === "string" && value.trim().length > 0;
+/** @param {unknown} value */
 const absolute = value => typeof value === "string" && value.startsWith("/");
 
+/**
+ * @param {any} board Untrusted parsed JSON.
+ * @returns {string[]} Empty when `board` is a valid {@link Board}.
+ */
 export function validateBoard(board) {
   if (board === null || typeof board !== "object" || Array.isArray(board)) return ["board must be an object"];
   const errors = [];
@@ -16,7 +41,7 @@ export function validateBoard(board) {
     return errors;
   }
   const seen = new Set();
-  board.tasks.forEach((task, index) => {
+  board.tasks.forEach((/** @type {any} */ task, /** @type {number} */ index) => {
     if (task === null || typeof task !== "object" || Array.isArray(task)) { errors.push(`task ${index} must be an object`); return; }
     if (!text(task.label)) errors.push(`task ${index}: label is required`);
     if (absolute(task.record) === absolute(task.run) || [task.record, task.run].some(v => v !== undefined && !absolute(v)))
@@ -29,8 +54,13 @@ export function validateBoard(board) {
   return errors;
 }
 
+/** @param {Pick<BoardEntry, "record" | "run" | "machine">} task */
 export const boardKey = task => JSON.stringify([task.record ?? null, task.run ?? null, task.machine ?? null]);
 
+/**
+ * @param {string} source
+ * @returns {{ board: Board | null, errors: string[] }}
+ */
 export function parseBoard(source) {
   try {
     const board = JSON.parse(source);
@@ -40,6 +70,11 @@ export function parseBoard(source) {
 }
 
 // The board file lives on this computer; each entry's machine routes its own reads.
+/**
+ * @param {ReadText} read
+ * @param {string} path
+ * @returns {Promise<{ tasks: TaskChoice[], state: string }>}
+ */
 export async function readBoard(read, path) {
   let source;
   try { source = await read(path, { on: null }); }
@@ -54,10 +89,15 @@ export async function readBoard(read, path) {
 
 // Watch the task's evidence folder (`<checkout>/.herdr-tasks`), which holds the
 // record, run index, brief and status written by the task CLI.
+/**
+ * @param {Pick<TaskChoice, "record" | "run">} choice
+ * @returns {string | null} Null when the path is too shallow to have that folder.
+ */
 export function evidenceFolder(choice) {
   const path = choice.record ?? choice.run;
   const parts = path.split("/");
   return parts.length > 3 ? parts.slice(0, -2).join("/") : null;
 }
 
+/** @param {string} path */
 export const parentFolder = path => path.slice(0, path.lastIndexOf("/")) || "/";
