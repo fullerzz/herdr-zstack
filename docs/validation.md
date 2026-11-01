@@ -1208,3 +1208,57 @@ Fixes: the roadmap status and the playbook limit now match the implementation. [
 Isolation incident: both Claude seats wrote their isolation exports to `adv/env.sh` with a heredoc. In their sandbox, a mise-shimmed or aliased `cat` left the file at 0 bytes. The coordinator approved one command that sourced it before noticing. That command and a few others ran hc without isolation. Claude's sandbox refused all of them with `cannot start core: Operation not permitted`, rc 5, because the user's core socket was not allowed. Afterward, the user's core still reported ID `d69141182c390e697d361b31591615ed`, PID 29654 and an unchanged uptime. The coordinator rejected the next prompt that sourced the file and approved hc commands only with the isolation variables inline.
 
 Limits: the live hc behavior in [supporting processes](../skills/hc-workflow/references/processes.md) rests on the coordinator's own run. No adversary reproduced it. The Claude adversaries' untested probes remain open: a foreground program that exits 124 by itself, a signal-killed foreground run, a program that traps HUP and exits 0 after `hc kill`, and a program that exits before printing its ready text.
+
+## Issue 18: multi-worker rosters in Task & Evidence — 2026-11-01
+
+Z-mode ran with native execution; Herdr execution was not selected, and no agent was launched. Installed versions: herdr-app 0.1.11 and hc 0.1.16. Task & Evidence now reads a run index and each member record, and shows per-member labels, binding status and receipt snapshots. It rereads on core fact changes. The [roster layout recipe](../examples/roster-layout.md) places it beside the coordinator. `workflows/roster.mjs` now takes its structural checks from the panel's pure `validateRunShape`, so one validator serves both.
+
+The panel does not run `hc events`. The mod rule forbids command execution, and `exec`/`hc()` return only after the program exits, within 30 s. Instead, it compares a key built from roster-labelled and bound terminals in `terminals()`, which herdr-app keeps live from herdr-core and which reruns `render` on change.
+
+### Isolated live inspection — PASS
+
+A disposable app home (`HERDR_APP_HOME=.herdr-tasks/i18/app`) and an isolated core (`HC_SESSION=i18`, scratch XDG paths, core ID `ba1042516f32832057d1db8f4a087c2d`) ran a second app window. The installer placed both mods there. `layout.clone main → qa18` plus [the recipe's](../examples/roster-layout.md) block, applied by `.herdr-tasks/i18/add-roster.mjs`, rendered with no layout errors. The fixture `.herdr-tasks/i18/setup.mjs` wrote a three-member run `qa18` with an unbound seat, a member bound to `t2`, and a member with a saved `accepted` receipt.
+
+| Step | Observation (`herdr-app shot`) |
+|---|---|
+| Async reads | `02-initial.png`: "Roster qa18: 3 members. The run index grants no aggregate acceptance." Each row shows owner, reported activity, record state, binding and receipt. `qa-b`'s saved `accepted` receipt shows as `RECEIPT SNAPSHOT: accepted` while its state stays `Acceptance: unverified`. The first member's brief loaded. |
+| Fact refresh | `04-worker.png`: `hc run --bg --label run=qa18 --label task=qa-a --label role=worker` started `t2`. Without input, the row changed to "address is live; core and occupant identity are not observable here" and listed `t2 · role=worker · live`. The coordinator shell `t1` showed in the tab beside the panel. |
+| Disk only | `05-disk-only.png`: rewriting `qa-a` as completed and dropping `qa-seat` from the index changed nothing on screen, as designed. Refresh or a fact change rereads. |
+| Roster change | `06-roster-change.png`: starting `t3` (`role=process`, `task=qa-a`) and `t4` (`task=qa-stray`) and killing `t2` triggered a reread: 2 members, `qa-a · completed (reported)`, `t3 · role=process · live`, and the run-labelled heading. |
+| Finding | `hc ls --all` listed killed `t2` as `finished`, but the panel said "terminal not listed by the core". The app's live listing omits finished terminals. The text now reads "address not in the app's live listing; it may have finished or been removed". The hot reload in `07-unlisted.png` reread everything asynchronously and showed it. |
+| Member removal | `08-unlisted.png`: an index reduced to `qa-b`, then a new `t5` watcher, reread to 1 member. The selection moved from removed `qa-a` to `qa-b`, and its brief loaded. `t3`, `t4` and `t5` were listed as run-labelled terminals not in the index, each with its task label. |
+
+Cleanup checked the isolated core ID first, killed and removed `t1`–`t5`, quit the scratch app, and stopped the isolated core. `hc ls --all` then returned `terminals: []`. The user's core kept ID `d69141182c390e697d361b31591615ed`. The user's window kept layout `personal-task-evidence` with no errors. No personal layout, mod or keybinding changed. Screenshots and fixtures are temporary local evidence under `.herdr-tasks/i18/`, which Git ignores.
+
+### Checks and limits
+
+- `node --test` passed 95 tests. Fixture tests cover run-index parsing, normalized-path parity with `path.resolve`, and per-member read failures, including index mismatches. They cover label grouping, remote address qualification, the fact key, and the reread rules: one reread while one is pending, a reread when facts change mid-read, kept selection and evidence, and manual Refresh clearing. A source check pins the panel's host imports and its only command, `agent.focus`. `herdr-app check mods/task-evidence` and `git diff --check` passed.
+- The initial Claude run could not click the app, so member selection, Refresh and scrolling were then covered only by tests. The computer-use follow-up below exercises them live.
+- Agent status changes count as fact changes. A busy agent therefore rereads up to the index plus three records and one file per status change. This was not measured against a real agent.
+- Remote rosters, remote address prefixes in `terminals()`, and finished-terminal visibility after an app restart were not observed live.
+
+### Computer-use follow-up — 2026-11-01
+
+Codex validated the uncommitted branch `18-show-multi-worker-rosters-in-task-evidence` with native computer use (`cua_repl`). It reused the disposable `i18` app home and isolated core, rebuilt the three-member fixture, and confirmed the installed mod copies matched the source (installer update: no changes). Because computer use selected the user's process when two apps shared one bundle identifier, the test used a temporary copy of the installed Herdr app with identifier `dev.herdr.qa18`. The copy was ad-hoc signed; no installed app files were edited. The app needed an unsandboxed launch to access macOS services. GPUI exposed no panel controls in the accessibility tree, so actions used screenshot coordinates and were followed by fresh observations.
+
+| Interaction | Observed result |
+|---|---|
+| Initial asynchronous reads | Three member rows and `qa-a`'s brief rendered. `qa-b` showed its saved `accepted` receipt alongside `Acceptance: unverified`. |
+| Click `qa-b` | The document changed to `qa-b brief`. Scrolling the metadata region exposed `SELECTED MEMBER — qa-b`, its full receipt revision, and its file buttons without moving the document. |
+| Click receipt evidence | `.herdr-tasks/qa-b/checks.md` loaded `qa-b checks` and `Coordinator checks passed.` Screenshot: `codex-artifact.png`. |
+| Edit fixture brief, click Refresh | Refresh returned to the first member and its first file. After editing that member's brief too, another click displayed `qa-a brief REVISED` and `Manual refresh read the disk update.` Manual refresh resets the member/file selection by design. |
+| Click Handoff and scroll document | `qa-b`'s 100-paragraph handoff scrolled to paragraph 99 and `END OF HANDOFF`. Metadata and Refresh stayed accessible. Screenshot: `codex-scroll-end.png`. |
+| Change index and start labelled process | Removing the seat from the index, then starting task-owned `t6` with `run=qa18`, `task=qa-b`, `role=process`, automatically showed two members and `t6 · role=process · live`, preserving the selected `qa-b` handoff. Receipt acceptance remained unverified. Screenshot: `codex-auto-refresh.png`. |
+| Invalid member during automatic refresh | Replacing `qa-b`'s fixture record with invalid JSON, then killing `t6`, triggered a reread. Its row showed `Malformed task record: invalid JSON`, and its earlier handoff was replaced by the no-evidence message; `qa-a` remained readable. Screenshot: `codex-malformed.png`. |
+
+No blocking UI defect was observed in these checks. One usability limit was visible: an automatic reread preserves the member and file but resets the document scroll position to the top. Remote behavior, rapid selection during delayed remote reads, keyboard accessibility and real-agent status-change frequency were not tested.
+
+Fresh validation passed all 37 panel tests and `herdr-app check mods/task-evidence` (the checker required native service access outside the sandbox). App status reported no errors. Cleanup removed only test terminal `t6`, verified an empty isolated terminal list, quit the QA app and stopped its core. The user's `personal-task-evidence` window still reported no errors. Screenshots remain local under `.herdr-tasks/i18/`. This follow-up changes validation documentation only; implementation files remain as Claude left them.
+
+### Main-window sidebar follow-up — 2026-11-01
+
+The main window initially showed the migration manual-mode configuration and an older installed runtime. Installer preview identified three updates (main.js, model.js, roster.js); applying them loaded the current branch. A clone, `qa18-sidebar`, of `personal-task-evidence` pointed its existing toggle sidebar at the disposable i18 roster fixture. No implementation files were changed.
+
+Computer-use clicks in the main Herdr window verified three asynchronously loaded members, per-member activity and binding text, and saved accepted receipts remaining explicitly unverified. Selecting qa-b loaded its brief; scrolling metadata left the document visible; clicking receipt evidence loaded checks.md. Removing qa-a from the fixture index and editing qa-b's brief, then clicking Refresh, displayed two members and the updated brief. Refresh reset the selected artifact to the brief. No blocking defect appeared in this pass.
+
+All 37 panel tests and the native checker passed with native service access (exit 0); git diff --check passed. The original personal-task-evidence layout was restored with no app errors. The updated runtime and reusable qa18-sidebar clone remain installed. No agents or terminals were launched. Automatic core-event refresh, remote operation, and keyboard accessibility were not re-exercised in this main-window pass; earlier isolated evidence above is separate coverage.
