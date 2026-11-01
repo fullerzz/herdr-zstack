@@ -75,9 +75,12 @@ export function taskChoices(config) {
     config.run ? [{ label: config.title || "Roster", run: config.run, machine: config.machine }] : [];
   /** @param {unknown} value */
   const absolute = value => typeof value === "string" && value.startsWith("/");
+  // The same rule as a board entry: absent, null (this computer) or a name.
+  /** @param {unknown} value */
+  const machine = value => value === undefined || value === null || (typeof value === "string" && value.trim().length > 0);
   return (Array.isArray(config.tasks) ? config.tasks : shorthand)
     .filter(task => task && typeof task === "object" && absolute(task.record) !== absolute(task.run) &&
-      [task.record, task.run].every(value => value === undefined || absolute(value)));
+      [task.record, task.run].every(value => value === undefined || absolute(value)) && machine(task.machine));
 }
 
 /**
