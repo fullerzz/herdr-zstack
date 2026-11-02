@@ -12,7 +12,7 @@ This repository owns Herdr-specific execution workflows, mods, layouts, and runt
 - Use Conventional Commit messages: `type: description` or `type(scope): description`, such as `feat: add a collapsible task sidebar`, `fix: restore panel selection`, or `docs: update installation steps`.
 - Clone shipped layouts before changing them. Preserve personal layouts, keybindings, and other mods. Never infer the task's target from whichever terminal has focus.
 - Treat task identity, terminal/session identity, runtime activity, and acceptance as separate facts. A restored terminal may contain a fresh shell. Reconcile before sending prompts; never replay an assignment automatically.
-- Mods are trusted code. Keep Task & Evidence read-only: file reads and navigation only, no record writes, command execution, or agent messaging.
+- Mods are trusted code. Keep Task & Evidence read-only apart from one write: removing a board entry the user confirms, by compare-and-swap on the board file. File reads and navigation otherwise; no record or evidence writes, command execution, or agent messaging.
 
 ## Structure and verification
 

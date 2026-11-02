@@ -97,6 +97,42 @@ export async function readBoard(read, path) {
   return { tasks, state: `Board: ${tasks.length} tracked task${tasks.length === 1 ? "" : "s"}. Activity is reported, never acceptance.` };
 }
 
+/**
+ * The host's `writeTextFile`: replaces `path` only while it still holds `expected`.
+ * @callback WriteText
+ * @param {string} path
+ * @param {string} text
+ * @param {string | null} expected
+ * @returns {Promise<unknown>}
+ */
+
+// The panel's only write. The host cannot delete files, so the panel cannot take
+// the CLI's board lock; it refuses while one is held, and the compare-and-swap
+// refuses a board that changed since this read. A CLI update that read the board
+// before this write can still restore the entry, never lose its own change.
+/**
+ * @param {ReadText} read
+ * @param {WriteText} write
+ * @param {string} path The board file on this computer.
+ * @param {string} key The {@link boardKey} of the entry to remove.
+ * @returns {Promise<string | null>} Why nothing was removed, or null once the entry is gone.
+ */
+export async function removeEntry(read, write, path, key) {
+  let source;
+  try {
+    if (await read(`${path}.lock`, { on: null }) !== null) return "Board is busy; try again.";
+    source = await read(path, { on: null });
+  } catch (error) { return `Board unavailable: ${String(error)}`; }
+  if (source === null) return null;
+  const { board, errors } = parseBoard(source);
+  if (!board) return `Malformed board: ${errors.join("; ")}`;
+  const tasks = board.tasks.filter(task => boardKey(task) !== key);
+  if (tasks.length === board.tasks.length) return null;
+  try { await write(path, `${JSON.stringify({ ...board, sequence: board.sequence + 1, tasks }, null, 2)}\n`, source); }
+  catch (error) { return `Board changed before removal; try again (${String(error)}).`; }
+  return null;
+}
+
 // Watch the task's evidence folder (`<checkout>/.herdr-tasks`), which holds the
 // record, run index, brief and status written by the task CLI.
 /**

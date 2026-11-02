@@ -1,6 +1,6 @@
 # Task & Evidence
 
-A read-only native GPUI panel with explicit task-record selection, brief/artifact/handoff navigation, and coordinator receipt snapshots. It never writes records, executes commands, sends agent messages, or infers acceptance from status or prose.
+A native GPUI panel with explicit task-record selection, brief/artifact/handoff navigation, and coordinator receipt snapshots. It is read-only except for one write: removing a [tracked task](#tracked-tasks) from the board after you confirm. It never writes records or evidence, executes commands, sends agent messages, or infers acceptance from status or prose.
 
 Follow [installation](../../docs/installation.md) to install the runtime as `zstack-task-evidence` and add it to a personal layout clone. The installer includes all sibling runtime `.js` modules; copying only the original three files is insufficient.
 
@@ -49,6 +49,8 @@ Use the [roster layout recipe](../../examples/roster-layout.md) to show a roster
 ## Tracked tasks
 
 **Clear**, beside **Refresh**, dismisses completed board entries from this panel until it reloads. It rereads each task record and clears only reported `completed` activity; a roster clears only when every member has a valid completed record. Active, paused, unreadable, missing and malformed tasks stay visible, as do tasks explicitly configured in the layout. Refresh and board rereads recheck dismissed entries: completed entries stay hidden, while a roster with new active work or an unreadable record reappears. Removing an entry from the board drops its dismissal and hidden count; re-adding it makes it visible again. An unavailable or malformed board removes nothing, so dismissals return with it. Clearing the selected entry selects the first remaining task, or returns to manual evidence when none remain. No board, record or evidence file is changed, and completion does not imply acceptance.
+
+**✕**, beside each board entry, removes it from the board file. It asks first: the row becomes a confirmation with **Remove** and **Cancel**, and nothing is written until you choose Remove. Layout-configured tasks have no ✕, because they are not on the board. Removal is the panel's only write. It changes only the board, as `task.mjs board remove` does: it drops the entry and increments `sequence`. The task's record, brief, status and evidence stay in its checkout. The host cannot delete files, so the panel cannot take the CLI's `.lock`. It refuses while that lock is held ("Board is busy"), and it writes only if the board still matches what it just read ("Board changed before removal"); then click ✕ again. A CLI update that read the board just before the removal can still restore the entry, but never loses its own change. A missing entry counts as removed. A malformed or unavailable board is not touched.
 
 Set `board` to an absolute board file to list the tasks that z-mode coordinators track with `scripts/task.mjs`. Without `board`, the panel reads no board. The CLI writes `~/.local/state/herdr-zstack/board.json` by default, or `$XDG_STATE_HOME/herdr-zstack/board.json` when that is set, unless `--board` or `HERDR_ZSTACK_BOARD` names another file:
 

@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { parseBoard, readBoard, validateBoard, evidenceFolder, completedTask, MAX_BOARD } from './board.js';
+import { parseBoard, readBoard, validateBoard, evidenceFolder, completedTask, removeEntry, boardKey, MAX_BOARD } from './board.js';
 import { readFile } from 'node:fs/promises';
 
 const active = JSON.parse(await readFile(new URL('../../records/fixtures/active.json', import.meta.url), 'utf8'));
@@ -62,4 +62,40 @@ test('the watched evidence folder is the checkout task folder', () => {
   assert.equal(evidenceFolder({ record: '/repo/.herdr-tasks/a/task.json' }), '/repo/.herdr-tasks');
   assert.equal(evidenceFolder({ run: '/repo/.herdr-tasks/r/run.json' }), '/repo/.herdr-tasks');
   assert.equal(evidenceFolder({ record: '/task.json' }), null);
+});
+
+test('removeEntry drops one entry under compare-and-swap and refuses unsafe boards', async () => {
+  const path = '/state/board.json';
+  const source = JSON.stringify({ ...board([entry('a'), entry('a', { machine: 'server' }), { label: 'Run', run: '/r/run.json', machine: null }]), sequence: 7, extra: 'kept' });
+  const store = (files) => {
+    const writes = [];
+    return { files, writes, read: async p => { if (files[p] instanceof Error) throw files[p]; return files[p] ?? null; },
+      write: async (p, text, expected) => { writes.push({ p, text, expected }); if ((files[p] ?? null) !== expected) throw new Error('stale'); files[p] = text; } };
+  };
+  const ok = store({ [path]: source });
+  assert.equal(await removeEntry(ok.read, ok.write, path, boardKey(entry('a'))), null);
+  assert.deepEqual(ok.writes.map(w => [w.p, w.expected]), [[path, source]]);
+  const next = JSON.parse(ok.files[path]);
+  assert.equal(next.sequence, 8);
+  assert.equal(next.extra, 'kept');
+  assert.deepEqual(next.tasks.map(boardKey), [boardKey(entry('a', { machine: 'server' })), boardKey({ run: '/r/run.json' })], 'machine distinguishes entries');
+  assert.ok(ok.files[path].endsWith('\n'));
+
+  for (const [files, message] of [
+    [{ [path]: source, [`${path}.lock`]: '' }, /busy/],
+    [{ [path]: '{' }, /Malformed board/],
+    [{ [path]: new Error('denied') }, /Board unavailable: Error: denied/],
+  ]) {
+    const s = store(files);
+    assert.match(await removeEntry(s.read, s.write, path, boardKey(entry('a'))), message);
+    assert.deepEqual(s.writes, []);
+  }
+  for (const files of [{}, { [path]: source }]) {
+    const s = store(files);
+    assert.equal(await removeEntry(s.read, s.write, path, boardKey(entry('gone'))), null, 'an absent entry is already removed');
+    assert.deepEqual(s.writes, []);
+  }
+  const stale = store({ [path]: source });
+  stale.write = async () => { throw new Error('stale snapshot'); };
+  assert.match(await removeEntry(stale.read, stale.write, path, boardKey(entry('a'))), /Board changed before removal; try again/);
 });

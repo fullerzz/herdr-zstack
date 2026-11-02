@@ -32,7 +32,7 @@ Host restrictions, available sandbox enforcement, user authorization, and the ho
 | Interrupt and clean up | `hc interrupt`, then task-owned `hc kill` / `hc rm` as appropriate | Supported; interruption stops a turn, not necessarily the process. Local core-restart recovery was proven on hc 0.1.16, newer than the baseline, in an isolated session: a kept terminal returned as a shell, `reconcile` reported it unbound, and nothing was resent. Remote recovery is untested. |
 | Remote commands and artifacts | `hc … --on <machine>`, qualified terminal addresses | Supported syntax; remote connectivity, permissions and recovery untested. Host file tools remain local. |
 | Show, navigate or arrange a workspace | `herdr-app ls`, `status`, `commands`, `do` | Supported; status inspection succeeded. Structural changes require requested presentation scope and explicit returned IDs. |
-| Check and inspect a mod | `herdr-app check`, `shot`; generated installed types | Supported; a checker pass covers initial rendering only. Task & Evidence remains read-only. |
+| Check and inspect a mod | `herdr-app check`, `shot`; generated installed types | Supported; a checker pass covers initial rendering only. Task & Evidence remains read-only apart from confirmed board-entry removal. |
 | Shared principles, planning and acceptance | Installed zstack instructions; coordinator | Supported instruction contract; no automatic acceptance from a terminal label, report or exit status. |
 | Legacy pane/agent command recipes | Old `herdr` TUI | Unavailable in this native adapter. |
 | Parent conversation/model/tools/permissions inheritance | Independent worker CLI | Unavailable as a contract; explicitly supply context and verify capabilities. |
