@@ -119,8 +119,9 @@ The repository root is also a `herdr-zstack` plugin. Its manifests are
 `.claude-plugin/plugin.json` and `.codex-plugin/plugin.json`. It ships
 `herdr-zstack:hc-workflow`, `herdr-zstack:single-worker`, and
 `herdr-zstack:swarm`. They are explicit-only; none installs a hook or activates
-a mode. zstack's session hook resolves the companion only after the user selects
-Herdr. A missing or ambiguous install is a capability gap.
+a mode. zstack resolves the companion when z-mode is activated or restored for automatic
+preflight and native-session detection, or when the user explicitly selects Herdr.
+A verified live hc terminal qualifies for automatic selection even without the app. A missing or ambiguous install is a capability gap.
 
 When zstack's swarm is the selected workflow, the hc companion loads this
 plugin's [swarm addendum](../skills/swarm/SKILL.md) alongside the shared skill.

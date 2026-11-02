@@ -89,6 +89,15 @@ test('a child terminal reports its parent', async t => {
   assert.deepEqual(report.caller.topology, { kind: 'child', parent: 't1' });
 });
 
+test('a verified hc terminal is supported without herdr-app or a window', async t => {
+  const { call, calls } = fixture(t, { versions: { 'herdr-app --version': missing } });
+  const report = await call();
+  assert.equal(report.session.status, 'supported');
+  assert.equal(report.herdrApp.status, 'unavailable');
+  assert.equal(report.caller.address, 't16');
+  assert.deepEqual(calls, ['hc --version', 'herdr-app --version']);
+});
+
 test('missing terminal ID is unavailable and never contacts a core', async t => {
   const { call, dialed } = fixture(t, { env: { HC_TERMINAL_ID: undefined } });
   const report = await call();
@@ -229,6 +238,9 @@ test('CLAUDE_CONFIG_DIR and CODEX_HOME locate installed zstack', t => {
 
 test('only version commands are allowlisted', () => {
   assert.ok(isAllowed('hc', ['--version']));
+  assert.equal(isAllowed('herdr-app', ['ls']), false);
+  assert.equal(isAllowed('herdr-app', []), false);
+  assert.equal(isAllowed('herdr-app', ['do', 'tab.new']), false);
   for (const args of [['server', 'status', '--json'], ['get', 't16', '--json'], ['templates', '--json'], ['run', '--bg', 'claude'], ['send', 't16', 'x']]) assert.equal(isAllowed('hc', args), false);
   assert.equal(isAllowed('sh', ['-c', 'hc --version']), false);
 });
