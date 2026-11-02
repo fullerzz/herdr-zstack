@@ -403,6 +403,54 @@ test('a slow dismissal recheck cannot restore an entry removed by a newer board 
   } finally { p.cleanup(); }
 });
 
+test('a board write during a dismissal recheck starts another board read', async () => {
+  const done = JSON.stringify({...JSON.parse(boardTask('a')), activity: 'completed'});
+  const p = await boardPanel({[boardPath]: boardFile(['a']), [boardRecord('a')]: done});
+  try {
+    p.callbacks.length = 0;
+    p.instance.clearCompleted(p.cx);
+    await p.callbacks.shift()(p.cx);
+    assert.deepEqual(p.instance.tasks, []);
+    const read = p.host.read;
+    let finish;
+    p.host.read = (path, options) => path === boardRecord('a') && !finish ? new Promise(resolve => { finish = resolve; }) : read(path, options);
+    const boardWatch = () => p.watches.findLast(w => w.path === '/state/herdr-zstack');
+    boardWatch().resolve([boardPath]);
+    await flush();
+    assert.ok(finish, 'the board read is rechecking the dismissed entry');
+    p.entries[boardPath] = boardFile(['b', 'a']);
+    p.entries[boardRecord('b')] = boardTask('b');
+    boardWatch().resolve([boardPath]);
+    finish(done);
+    await flush();
+    assert.deepEqual(p.instance.tasks.map(t => t.label), ['Task b'], 'the write during the recheck is not missed');
+    assert.equal(p.instance.cleared.size, 1);
+  } finally { await p.close(); }
+});
+
+test('an unreadable board keeps dismissals for when it reads again', async () => {
+  const p = await boardPanel({[boardPath]: boardFile(['a']), [boardRecord('a')]: JSON.stringify({...JSON.parse(boardTask('a')), activity: 'completed'})});
+  try {
+    p.callbacks.length = 0;
+    p.instance.clearCompleted(p.cx);
+    await p.callbacks.shift()(p.cx);
+    const boardWatch = () => p.watches.findLast(w => w.path === '/state/herdr-zstack');
+    p.entries[boardPath] = '{';
+    boardWatch().resolve([boardPath]);
+    await flush();
+    assert.match(p.instance.boardState, /Malformed board/);
+    assert.equal(p.instance.cleared.size, 1, 'unknown board contents remove no dismissal');
+    p.callbacks.length = 0;
+    byId(p.instance.render(p.cx), 'refresh').styles.on_click[0](undefined, p.cx);
+    await p.callbacks.shift()(p.cx);
+    assert.equal(p.instance.cleared.size, 1, 'Refresh keeps it too');
+    p.entries[boardPath] = boardFile(['a']);
+    boardWatch().resolve([boardPath]);
+    await flush();
+    assert.deepEqual(p.instance.tasks, [], 'the completed entry stays hidden');
+  } finally { await p.close(); }
+});
+
 test('a change in the task evidence folder rereads the record and status, keeping them visible', async () => {
   const p = await boardPanel({[boardPath]: boardFile(['b']), [boardRecord('b')]: boardTask('b'), '/repo/.herdr-tasks/b/brief.md': 'goal'});
   p.callbacks.shift()(p.cx);                 // evidence-folder watch loop

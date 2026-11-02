@@ -82,15 +82,16 @@ export function parseBoard(source) {
 /**
  * @param {ReadText} read
  * @param {string} path
- * @returns {Promise<{ tasks: TaskChoice[], state: string }>}
+ * @returns {Promise<{ tasks: TaskChoice[] | null, state: string }>} Tasks are null when the
+ *   board is unreadable or malformed: its contents are unknown, not empty.
  */
 export async function readBoard(read, path) {
   let source;
   try { source = await read(path, { on: null }); }
-  catch (error) { return { tasks: [], state: `Board unavailable: ${String(error)}` }; }
+  catch (error) { return { tasks: null, state: `Board unavailable: ${String(error)}` }; }
   if (source === null) return { tasks: [], state: "Board has no tracked tasks yet." };
   const { board, errors } = parseBoard(source);
-  if (!board) return { tasks: [], state: `Malformed board: ${errors.join("; ")}` };
+  if (!board) return { tasks: null, state: `Malformed board: ${errors.join("; ")}` };
   const tasks = board.tasks.map(task => ({ label: task.label, ...(task.record ? { record: task.record } : { run: task.run }),
     machine: task.machine ?? null, board: true }));
   return { tasks, state: `Board: ${tasks.length} tracked task${tasks.length === 1 ? "" : "s"}. Activity is reported, never acceptance.` };

@@ -23,7 +23,7 @@ export default class TaskEvidence extends View {
     this.configured = taskChoices(this.config);
     /** @type {TaskChoice[]} */
     this.tasks = this.configured;
-    /** @type {TaskChoice[]} */
+    /** @type {TaskChoice[] | null} */
     this.boardTasks = [];
     /** @type {Set<string>} */
     this.cleared = new Set();
@@ -57,22 +57,24 @@ export default class TaskEvidence extends View {
   /** @param {Context} cx */
   watchBoard(cx) {
     const token = this.boardWatch = {};
+    const folder = parentFolder(this.config.board);
     cx.spawn(async cx => {
       for (;;) {
+        // Watch before reading, so a board write during the read or a dismissal
+        // recheck starts another pass. Before the first task creates the board
+        // folder, watch its parent so that first task still appears without a Refresh.
+        const changed = watchFolder(folder).catch(() => watchFolder(parentFolder(folder))).then(() => /** @type {const} */ (false), (/** @type {unknown} */ error) => ({ error }));
         const { tasks, state } = await readBoard(readTextFile, this.config.board);
         if (this.closed || this.boardWatch !== token) return;
         this.boardState = state;
         await this.applyBoard(cx, tasks);
         if (this.closed || this.boardWatch !== token) return;
         cx.notify();
-        // Before the first task creates the board folder, watch its parent so
-        // that first task still appears without a Refresh.
-        const folder = parentFolder(this.config.board);
-        try { await watchFolder(folder).catch(() => watchFolder(parentFolder(folder))); }
-        catch (error) {
+        const failed = await changed;
+        if (failed) {
           if (this.boardWatch !== token) return;
           this.boardWatch = null;
-          this.boardState = `${state} Not watching the board (${String(error)}); Refresh rereads it.`;
+          this.boardState = `${state} Not watching the board (${String(failed.error)}); Refresh rereads it.`;
           cx.notify();
           return;
         }
@@ -81,19 +83,24 @@ export default class TaskEvidence extends View {
     });
   }
 
-  /** @param {Context} cx @param {TaskChoice[]} boardTasks */
+  // Null board tasks mean an unreadable board: it lists nothing, but removes
+  // no dismissal, so completed entries stay hidden once it reads again.
+  /** @param {Context} cx @param {TaskChoice[] | null} boardTasks */
   async applyBoard(cx, boardTasks) {
     const request = this.boardRequest = (this.boardRequest ?? 0) + 1;
     this.boardTasks = boardTasks;
-    const keys = new Set(boardTasks.map(boardKey));
-    for (const key of this.cleared) if (!keys.has(key)) this.cleared.delete(key);
+    const listed = boardTasks ?? [];
+    if (boardTasks) {
+      const keys = new Set(boardTasks.map(boardKey));
+      for (const key of this.cleared) if (!keys.has(key)) this.cleared.delete(key);
+    }
     // A rolling run reuses its path for new work; a dismissal is not permanent.
-    for (const task of boardTasks.filter(task => this.cleared.has(boardKey(task)))) {
+    for (const task of listed.filter(task => this.cleared.has(boardKey(task)))) {
       const completed = await completedTask(readTextFile, task);
       if (this.closed || request !== this.boardRequest) return;
       if (!completed) this.cleared.delete(boardKey(task));
     }
-    const next = [...this.configured, ...boardTasks.filter(task => !this.cleared.has(boardKey(task)))];
+    const next = [...this.configured, ...listed.filter(task => !this.cleared.has(boardKey(task)))];
     if (JSON.stringify(next) === JSON.stringify(this.tasks)) return;
     const current = this.tasks[this.taskIndex];
     this.tasks = next;

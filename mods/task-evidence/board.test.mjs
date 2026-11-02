@@ -43,9 +43,15 @@ test('a board names exactly one absolute record or run per entry', () => {
 });
 
 test('reading a board distinguishes missing, malformed and unavailable files', async () => {
-  assert.match((await readBoard(async () => null, '/b.json')).state, /no tracked tasks yet/);
-  assert.match((await readBoard(async () => '{"schemaVersion":1}', '/b.json')).state, /Malformed board/);
-  assert.match((await readBoard(async () => { throw new Error('denied'); }, '/b.json')).state, /unavailable: Error: denied/);
+  const missing = await readBoard(async () => null, '/b.json');
+  assert.match(missing.state, /no tracked tasks yet/);
+  assert.deepEqual(missing.tasks, [], 'a missing board lists no tasks');
+  const malformed = await readBoard(async () => '{"schemaVersion":1}', '/b.json');
+  assert.match(malformed.state, /Malformed board/);
+  const unavailable = await readBoard(async () => { throw new Error('denied'); }, '/b.json');
+  assert.match(unavailable.state, /unavailable: Error: denied/);
+  assert.equal(malformed.tasks, null, 'unknown contents are not an empty board');
+  assert.equal(unavailable.tasks, null);
   let on;
   const { tasks } = await readBoard(async (_path, options) => { on = options.on; return JSON.stringify(board([entry('a', { machine: 'server' })])); }, '/b.json');
   assert.equal(on, null, 'the board itself is always read on this computer');
