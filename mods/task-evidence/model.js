@@ -27,6 +27,7 @@
  * @property {string} [run]
  * @property {string | null} [machine]
  * @property {boolean} [board] Listed by the board rather than the layout.
+ * @property {number | null} [added] The board sequence that added a board entry.
  */
 
 /** @typedef {{ label: string, path: string }} EvidenceFile */

@@ -14,7 +14,7 @@ async function panel(read, props = {}) {
   const host = `const h = globalThis[${JSON.stringify(key)}];
     export const View = class {}; export const readTextFile = (...args) => h.read(...args); export const spaces = () => h.spaces; export const props = () => h.props;
     export const theme = () => ({}); export const agents = () => []; export const terminals = () => h.terminals; export const run = () => null;
-    export const watchFolder = path => h.watch(path);
+    export const watchFolder = path => h.watch(path); export const writeTextFile = (...args) => h.write(...args);
     export const div = () => { const node = {items: [], styles: {}}; let builder;
       builder = new Proxy(node, {get(target, name) {
         if (name in target) return target[name];
@@ -296,9 +296,11 @@ test('facts changing during a reread trigger another; manual refresh clears firs
   p.cleanup();
 });
 
-test('panel host surface stays read-only', () => {
+test('panel host surface reads, navigates and writes only through removeEntry', () => {
   const imported = [...main.matchAll(/^import \{([^}]*)\} from "herdr";$/gm)].flatMap(m => m[1].split(',').map(name => name.trim()));
-  assert.deepEqual(imported.sort(), ['agents', 'props', 'readTextFile', 'run', 'spaces', 'terminals', 'theme', 'watchFolder']);
+  assert.deepEqual(imported.sort(), ['agents', 'props', 'readTextFile', 'run', 'spaces', 'terminals', 'theme', 'watchFolder', 'writeTextFile']);
+  assert.deepEqual([...main.matchAll(/writeTextFile[^\n]*/g)].map(m => m[0]).slice(1),
+    ['writeTextFile, this.config.board, task);'], 'the write goes only through removeEntry, which writes the removal list');
   assert.deepEqual([...main.matchAll(/run\("([^"]+)"/g)].map(m => m[1]), ['agent.focus'], 'navigation is the only command');
 });
 
@@ -473,6 +475,92 @@ test('a change in the task evidence folder rereads the record and status, keepin
   assert.equal(p.instance.snapshot.text, '**Now:** verified');
   assert.equal(p.watches.length, 3, 'the loop waits again');
   await p.close();
+});
+
+// A host write that refuses a stale snapshot, as writeTextFile does.
+function boardWrites(p) {
+  const writes = [];
+  p.host.write = async (path, text, expected) => {
+    writes.push(path);
+    if ((p.entries[path] ?? null) !== expected) throw new Error('stale snapshot');
+    p.entries[path] = text;
+    return null;
+  };
+  return writes;
+}
+const click = (p, id) => byId(p.instance.render(p.cx), id).styles.on_click[0](undefined, p.cx);
+const removedFile = '/state/herdr-zstack/board.removed.json';
+
+test('the X beside a board task asks first, then hides only that entry without writing the board', async () => {
+  const p = await boardPanel({[boardPath]: boardFile(['b', 'a']), [boardRecord('b')]: boardTask('b')},
+    {tasks: [{label: 'Pinned', record: '/pinned/.herdr-tasks/p/task.json'}]});
+  const writes = boardWrites(p);
+  const before = p.entries[boardPath];
+  try {
+    assert.deepEqual(p.instance.tasks.map(t => t.label), ['Pinned', 'Task b', 'Task a']);
+    assert.equal(byId(p.instance.render(p.cx), 'remove-0'), null, 'layout tasks are not on the board');
+    click(p, 'remove-2');
+    assert.ok(texts(p.instance.render(p.cx)).includes('Remove “Task a” from the board? Its record and evidence files stay.'));
+    assert.equal(byId(p.instance.render(p.cx), 'task-2'), null, 'the confirmation replaces the row');
+    click(p, 'remove-cancel-2');
+    assert.ok(byId(p.instance.render(p.cx), 'remove-2'));
+    assert.deepEqual(writes, [], 'nothing is written before confirmation');
+    click(p, 'remove-2');
+    p.callbacks.length = 0;
+    click(p, 'remove-confirm-2');
+    assert.ok(texts(p.instance.render(p.cx)).includes('Removing…'));
+    await p.callbacks.shift()(p.cx);
+    assert.deepEqual(writes, [removedFile]);
+    assert.equal(p.entries[boardPath], before, 'the board file is never written');
+    assert.deepEqual(JSON.parse(p.entries[removedFile]).removed, [{record: boardRecord('a'), machine: null, added: null}]);
+    assert.deepEqual(p.instance.tasks.map(t => t.label), ['Pinned', 'Task b']);
+    assert.equal(p.instance.taskIndex, 0, 'the selection stays on its task');
+    assert.equal(p.instance.confirmRemove, null);
+    assert.equal(p.instance.removeState, null);
+  } finally { await p.close(); }
+});
+
+test('a refused removal says why and keeps the entry listed', async () => {
+  const p = await boardPanel({[boardPath]: boardFile(['a']), [removedFile]: '{', [boardRecord('a')]: boardTask('a')});
+  const writes = boardWrites(p);
+  try {
+    click(p, 'remove-0');
+    p.callbacks.length = 0;
+    click(p, 'remove-confirm-0');
+    await p.callbacks.shift()(p.cx);
+    assert.deepEqual(writes, []);
+    assert.deepEqual(p.instance.tasks.map(t => t.label), ['Task a']);
+    assert.ok(texts(p.instance.render(p.cx)).some(line => /^Malformed removed-task list/.test(line)));
+    assert.ok(byId(p.instance.render(p.cx), 'remove-0'), 'the confirmation closes');
+  } finally { await p.close(); }
+});
+
+test('a slow post-removal board read cannot replace a newer watched board', async () => {
+  const p = await boardPanel({[boardPath]: boardFile(['b', 'a']), [boardRecord('b')]: boardTask('b')});
+  boardWrites(p);
+  try {
+    const read = p.host.read;
+    let release, boardReads = 0;
+    const stale = p.entries[boardPath];
+    // Delay the reread after the removal, not removeEntry's own board read.
+    p.host.read = (path, options) => {
+      if (path !== boardPath || ++boardReads !== 2) return read(path, options);
+      return new Promise(resolve => { release = () => resolve(stale); });
+    };
+    click(p, 'remove-1');
+    p.callbacks.length = 0;
+    click(p, 'remove-confirm-1');
+    const removal = p.callbacks.shift()(p.cx);
+    await flush();
+    assert.ok(release, 'the post-removal read is waiting');
+    p.entries[boardPath] = JSON.stringify({schemaVersion: 1, sequence: 9, tasks: ['c', 'b', 'a'].map(id => ({label: `Task ${id}`, record: boardRecord(id), machine: null}))});
+    p.watches.findLast(w => w.path === '/state/herdr-zstack').resolve([boardPath]);
+    await flush();
+    assert.deepEqual(p.instance.tasks.map(t => t.label), ['Task c', 'Task b']);
+    release();
+    await removal;
+    assert.deepEqual(p.instance.tasks.map(t => t.label), ['Task c', 'Task b'], 'the older read is discarded');
+  } finally { await p.close(); }
 });
 
 test('board updates keep the selected task and fall back when it is removed', async () => {

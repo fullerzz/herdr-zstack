@@ -67,7 +67,7 @@ export async function writeRun(path, run, { writer, expectedSequence = 0 }) {
 }
 
 // Many coordinators share one board, so each update rereads it under the lock
-// and applies `change(tasks)`. A busy lock is retried briefly, never stolen.
+// and applies `change(tasks, nextSequence)`. A busy lock is retried briefly, never stolen.
 export async function updateBoard(path, change, { attempts = 40 } = {}) {
   await mkdir(dirname(path), { recursive: true });
   for (let attempt = 1; ; attempt++) {
@@ -77,7 +77,8 @@ export async function updateBoard(path, change, { attempts = 40 } = {}) {
         try { previous = JSON.parse(await readFile(path, 'utf8')); }
         catch (error) { if (error.code !== 'ENOENT') throw error; }
         if (previous !== undefined && validateBoard(previous).length) throw new Error('existing board is malformed');
-        const board = { schemaVersion: 1, sequence: (previous?.sequence ?? 0) + 1, tasks: change(previous?.tasks ?? []) };
+        const sequence = (previous?.sequence ?? 0) + 1;
+        const board = { schemaVersion: 1, sequence, tasks: change(previous?.tasks ?? [], sequence) };
         const errors = validateBoard(board);
         if (errors.length) throw new Error(errors.join('; '));
         await writeAtomic(path, `${JSON.stringify(board, null, 2)}\n`);

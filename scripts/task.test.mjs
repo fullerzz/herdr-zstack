@@ -38,7 +38,7 @@ test('start writes the coordinator record, brief, status and board entry', async
   assert.match(await readFile(join(f.checkout, record.brief), 'utf8'), /## Goal\n\nShow agent status\./);
   assert.match(await readFile(join(f.checkout, record.handoff), 'utf8'), /\*\*Now:\*\* Started\./);
   const board = await f.json(f.board);
-  assert.deepEqual(board.tasks, [{ label: 'fix-1 · repo', record: recordPath, machine: null }]);
+  assert.deepEqual(board.tasks, [{ label: 'fix-1 · repo', record: recordPath, machine: null, added: 1 }]);
   assert.match(f.output.at(-1), /hc label t16 task=fix-1/);
   await assert.rejects(f.cli(['start', '--task', 'fix-1', '--scope', 's', '--goal', 'g']), /already exists/);
 });
@@ -55,7 +55,7 @@ for (const option of ['label', 'coordinator']) {
     const recordPath = join(f.checkout, '.herdr-tasks/fix-1/task.json');
     assert.equal((await f.json(recordPath)).coordinator, 't16');
     assert.deepEqual((await f.json(f.board)).tasks, [{
-      label: option === 'label' ? 'Fixed label' : 'fix-1 · repo', record: recordPath, machine: null,
+      label: option === 'label' ? 'Fixed label' : 'fix-1 · repo', record: recordPath, machine: null, added: 1,
     }]);
   });
 }
@@ -78,7 +78,7 @@ test('concurrent starts keep all task evidence owned by the successful coordinat
   assert.equal(status.split('\n').filter(line => line.startsWith('- ')).length, 1);
   const board = await f.json(f.board);
   assert.equal(board.sequence, 1);
-  assert.deepEqual(board.tasks, [{ label: winner, record: join(folder, 'task.json'), machine: null }]);
+  assert.deepEqual(board.tasks, [{ label: winner, record: join(folder, 'task.json'), machine: null, added: 1 }]);
 });
 
 test('start preserves evidence in an existing task folder without a record', async t => {

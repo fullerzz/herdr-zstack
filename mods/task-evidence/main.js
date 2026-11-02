@@ -1,10 +1,10 @@
 import { View, div } from "gpui-kit";
 import { v_flex, h_flex, TextView } from "gpui-base";
-import { agents, spaces, terminals, theme, readTextFile, run, props, watchFolder } from "herdr";
+import { agents, spaces, terminals, theme, readTextFile, writeTextFile, run, props, watchFolder } from "herdr";
 import { filesFor, taskSpace, taskChoices, recordFiles, taskActivity } from "./model.js";
 
 import { readMember, readRoster, rosterFacts, factKey } from "./roster.js";
-import { readBoard, boardKey, completedTask, evidenceFolder, parentFolder } from "./board.js";
+import { readBoard, boardKey, completedTask, evidenceFolder, parentFolder, removeEntry } from "./board.js";
 import { parseDecisions, evidencePointers } from "./decisions.js";
 /** @import { AsyncContext, ClickEvent, Color, Context } from "gpui-kit" */
 /** @import { EvidenceFile, PanelConfig, TaskChoice } from "./model.js" */
@@ -28,6 +28,11 @@ export default class TaskEvidence extends View {
     /** @type {Set<string>} */
     this.cleared = new Set();
     this.clearing = false;
+    /** The board key awaiting removal confirmation. @type {string | null} */
+    this.confirmRemove = null;
+    this.removing = false;
+    /** @type {string | null} */
+    this.removeState = null;
     /** @type {number} */
     this.taskIndex = 0;
     /** @type {RunIndex | null} */
@@ -64,17 +69,14 @@ export default class TaskEvidence extends View {
         // recheck starts another pass. Before the first task creates the board
         // folder, watch its parent so that first task still appears without a Refresh.
         const changed = watchFolder(folder).catch(() => watchFolder(parentFolder(folder))).then(() => /** @type {const} */ (false), (/** @type {unknown} */ error) => ({ error }));
-        const { tasks, state } = await readBoard(readTextFile, this.config.board);
-        if (this.closed || this.boardWatch !== token) return;
-        this.boardState = state;
-        await this.applyBoard(cx, tasks);
+        await this.readBoardNow(cx);
         if (this.closed || this.boardWatch !== token) return;
         cx.notify();
         const failed = await changed;
         if (failed) {
           if (this.boardWatch !== token) return;
           this.boardWatch = null;
-          this.boardState = `${state} Not watching the board (${String(failed.error)}); Refresh rereads it.`;
+          this.boardState = `${this.boardState ?? ""} Not watching the board (${String(failed.error)}); Refresh rereads it.`;
           cx.notify();
           return;
         }
@@ -133,6 +135,37 @@ export default class TaskEvidence extends View {
         await this.applyBoard(cx, this.boardTasks);
       } finally {
         this.clearing = false;
+        if (!this.closed) cx.notify();
+      }
+    });
+    cx.notify();
+  }
+
+  // Board reads can finish out of order; only the newest read is applied.
+  /** @param {Context} cx */
+  async readBoardNow(cx) {
+    const read = this.boardRead = (this.boardRead ?? 0) + 1;
+    const { tasks, state } = await readBoard(readTextFile, this.config.board);
+    if (this.closed || read !== this.boardRead) return;
+    this.boardState = state;
+    await this.applyBoard(cx, tasks);
+  }
+
+  // Hides a confirmed board entry through the panel's removal list. The board
+  // file, record and evidence stay unchanged.
+  /** @param {Context} cx @param {TaskChoice} task */
+  removeTask(cx, task) {
+    if (this.removing) return;
+    this.removing = true;
+    cx.spawn(async cx => {
+      try {
+        this.removeState = await removeEntry(readTextFile, writeTextFile, this.config.board, task);
+        if (this.closed) return;
+        this.confirmRemove = null;
+        // The board watch rereads too; this covers a board that cannot be watched.
+        await this.readBoardNow(cx);
+      } finally {
+        this.removing = false;
         if (!this.closed) cx.notify();
       }
     });
@@ -281,6 +314,24 @@ export default class TaskEvidence extends View {
     /** @param {string} id @param {string} text @param {(event: ClickEvent, cx: Context) => void} onClick */
     const action = (id, text, onClick, selected = false) => div().id(id).px(8).py(5).rounded(5)
       .bg(selected ? t.selected : t.raised).hover(s => s.bg(t.hover)).on_click(onClick).child(text);
+    // Board entries get a remove control; layout tasks are not on the board.
+    /** @param {TaskChoice} task @param {number} index */
+    const taskRow = (task, index) => {
+      const label = task.label || task.record || task.run;
+      const row = action(`task-${index}`, label, (_event, cx) => {
+        this.taskIndex = index; this.loadTask(cx); cx.notify();
+      }, index === this.taskIndex);
+      if (!task.board) return row;
+      const key = boardKey(task);
+      if (this.confirmRemove !== key) return h_flex().gap(4).child(row.flex_1())
+        .child(action(`remove-${index}`, "✕", (_event, cx) => { this.confirmRemove = key; this.removeState = null; cx.notify(); })
+          .tooltip("Remove from board").accessibility_label(`Remove ${label} from board`));
+      return v_flex().gap(4).px(8).py(5).rounded(5).bg(t.raised)
+        .child(div().child(`Remove “${label}” from the board? Its record and evidence files stay.`))
+        .child(h_flex().gap(4)
+          .child(action(`remove-confirm-${index}`, this.removing ? "Removing…" : "Remove", (_event, cx) => this.removeTask(cx, task)))
+          .child(action(`remove-cancel-${index}`, "Cancel", (_event, cx) => { this.confirmRemove = null; cx.notify(); })));
+    };
     /** @param {TerminalFact} term */
     const terminalLine = term => `${term.address}${term.role ? ` · role=${term.role}` : ""}${term.task && !this.members.some(m => m.taskId === term.task) ? ` · task=${term.task}` : ""} · ${term.state ?? "unknown"}${term.status ? ` · ${term.status}` : ""}`;
     /** @param {RosterMember} member @param {number} index */
@@ -343,9 +394,8 @@ export default class TaskEvidence extends View {
           .child(div().text_color(t.muted).child(this.config.title || this.config.folder || "No task configured"))
           .when(Boolean(this.boardState), el => el.child(div().text_color(t.dim).child(this.boardState)))
           .when(this.cleared.size > 0, el => el.child(div().text_color(t.dim).child(`${this.cleared.size} completed entries hidden until panel reload.`)))
-          .child(v_flex().gap(3).children(this.tasks.map((task, index) => action(`task-${index}`, task.label || task.record || task.run, (_event, cx) => {
-            this.taskIndex = index; this.loadTask(cx); cx.notify();
-          }, index === this.taskIndex))))
+          .when(Boolean(this.removeState), el => el.child(div().text_color(t.dim).child(this.removeState ?? "")))
+          .child(v_flex().gap(3).children(this.tasks.map(taskRow)))
           .when(Boolean(this.recordState), el => el.child(div().text_color(t.muted).child(this.recordState)))
           .when(Boolean(this.roster), el => el
             .child(heading("ROSTER — EACH RECEIPT IS ITS OWN SNAPSHOT"))
