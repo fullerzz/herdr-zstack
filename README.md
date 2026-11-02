@@ -16,7 +16,7 @@ Herdr-specific workflows and native UI for zstack. This repository owns integrat
 - [Role templates](templates/): `z-agent` and `comment-sicko` as hc templates for Claude Code and Codex, installed with `--target templates`; see [installation](docs/installation.md#hc-role-templates).
 - [Worker lifecycle](docs/worker-lifecycle.md): scoped single-worker execution and pause/pickup reconciliation, with [local pilot evidence](docs/validation.md#issue-3-single-worker-hc-pilot--2026-10-31) and [recovery proof limits](docs/validation.md#issue-4-pause-and-pickup-reconciliation--2026-10-31).
 
-Installation does not activate z-mode or Herdr execution. Task registration and selection remain explicit; live pilot evidence and runtime limits are recorded in [validation](docs/validation.md).
+Installation does not activate z-mode or Herdr execution. Activating z-mode automatically runs the companion preflight and selects Herdr in a verified live hc terminal, including headless terminals, unless Native was explicitly selected. Task registration follows that session selection; live pilot evidence and runtime limits are recorded in [validation](docs/validation.md).
 
 ## Develop
 

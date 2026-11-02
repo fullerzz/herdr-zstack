@@ -1392,3 +1392,13 @@ Regressions: a model of the host write that commits a real `updateBoard` between
 Limits: the installed mod was not updated in this pass, and the running UI was not re-inspected. Existing board entries have no `added` until a coordinator adds them again; a removal of such an entry names `added: null`.
 
 A second pullfrog pass found that `removeEntry` read the board before the removal list, so it could prune another panel's newer removal against an older board snapshot and both removals would report success. It now reads the list first; a removal committed after that read fails the conditional write. The regression pauses one removal after its first read while the CLI adds `c` and a second removal hides it; the first removal is refused and a retry succeeds. It fails with the previous read order. `node --test mods/task-evidence/*.test.mjs` passed 77 tests and the full suite passed 160; `just check`, `herdr-app check mods/task-evidence` and `git diff --check` passed (exit 0).
+
+## Automatic Herdr selection — 2026-11-01
+
+Z-mode activation/restoration directs the agent to run the installed companion's existing read-only preflight and select Herdr when `session.status` is supported, unless Native was explicitly selected. Headless hc terminals qualify. Caller/core identity, live-terminal resolution, CLI socket agreement, permissions and pre-dispatch verification remain required; the app need not be installed or queried.
+
+- `node --test`: 161 passed, including a supported hc session with herdr-app unavailable and refusal of app-discovery commands. `git diff --check`: passed.
+- Read-only live preflight of explicitly supplied existing terminal t16 returned supported using only version commands and caller-core RPC. The actual coordinator lacked HC_TERMINAL_ID and correctly returned unavailable. This metadata probe did not claim that the coordinator occupied t16.
+- Shared zstack uses one atomic execution-selection record. Its 100-pair concurrent-control repro lost zero choices; all 150 Python tests and structural validation passed. Legacy controls remain readable and malformed explicit state suppresses automatic selection.
+- `herdr-app check mods/task-evidence` and `just check` passed earlier in this task; no mod source changed. The sandboxed host checker stalled before a bounded unsandboxed rerun passed.
+- Neither plugin was refreshed, no workers were dispatched, and fresh-host activation/dispatch remains untested. The shared repository's broader Node suite encountered an unrelated statechart signal-handling failure/stall; no clean full-suite result is claimed for it.

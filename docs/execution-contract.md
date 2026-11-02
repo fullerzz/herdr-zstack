@@ -12,7 +12,7 @@ zstack owns selection, action authority, scoped briefs, exclusive write ownershi
 
 ## Selection and authority
 
-Native host execution remains the default. Only an explicit user selection enables Herdr execution for the current session; a request to develop this repository does not. z-mode selection is independent. Use only the current session's trusted hook controls when available; otherwise retain selection in conversation and the handoff. Never copy controls, session IDs, plugin state paths, credentials, or approval authority into a child. A new session must make its own selection.
+Native host execution remains the default outside a verified live hc terminal. When z-mode is activated or restored, automatically run the companion’s preflight and select Herdr if `session.status` is `supported`. An explicit Native/disable-Herdr choice suppresses automatic selection for the session, even when z-mode is re-enabled; stopping z-mode clears that opt-out. Headless hc terminals qualify for automatic selection; explicit Herdr selection also remains available. A request to develop this repository does not activate either mode. Use only the current session's trusted hook controls when available; otherwise retain selection in conversation and the handoff. Never copy controls, session IDs, plugin state paths, credentials, or approval authority into a child. A new session must make its own selection.
 
 A **native session** requires all three: `HC_TERMINAL_ID` is set, `hc server status` answers for the caller's core, and `hc get "$HC_TERMINAL_ID"` resolves that same address as a live terminal. `HERDR_ENV` is legacy diagnostic context only. It neither establishes nor enables native execution, and `HERDR_ENV=1` without `HC_TERMINAL_ID` is a legacy-only environment, not a native session. The hc 0.1.15 CLI starts a core on demand for `server status`, `get`, and other core commands. Detection must not invoke them when the caller's core could be missing. Ask the core named by `HC_TERMINAL_SOCKET` instead; that socket is the caller core's address. The hc CLI addresses `HC_SOCKET` when it is set, and otherwise a socket derived from `HC_SESSION` and the XDG directories. Dispatch through the CLI therefore needs that address to equal `HC_TERMINAL_SOCKET`. For parent-linked execution, the resolved caller is the parent; verify the intended machine/core before dispatch. An operator may instead supply an explicit verified task parent. A standalone coordinator without a core terminal may deliberately use `--no-parent`, provided it records ownership, collection and cleanup responsibility itself. This is an explicit topology choice, never an automatic fallback for a stale parent. Focus and the app's current agent are never substitutes for identity. Task ownership and execution authorization are required even when no parent exists.
 
@@ -51,7 +51,7 @@ Discovery details:
 - Pass `--zstack <dir>` to choose a copy explicitly.
 
 Preflight is strictly read-only:
-- It runs only `hc --version` and `herdr-app --version`, and lists them in `commands`.
+- It runs only `hc --version` and `herdr-app --version`, and lists them in `commands`. It never queries or opens an app window.
 - It never runs an hc core command.
 - It sends only the read-only core methods `hello`, `server.status`, `terminal.get` (without `caller`, which would mark child news as seen), `templates.list` and `machine.list`. It sends them as JSON-RPC over `HC_TERMINAL_SOCKET` and lists them in `requests`.
 - A missing or vanished core is a failed connection, never a new core.
@@ -59,6 +59,8 @@ Preflight is strictly read-only:
 - It never launches, sends, signals, or changes configuration.
 
 Before dialing the core, it requires that the hc CLI would address the same core. Any `socket` key in the herdr-core configuration, quoted or bare, makes that address unverified. So does Windows, where the CLI's socket placement has not been inspected.
+
+Automatic selection requires only a supported native session. The app is optional: it need not be installed, running, or displaying the caller. App membership and app core identity are not checked; the caller’s core identity and CLI socket agreement are still verified.
 
 When a check fails, the report says why the session is unavailable. The steps below that need judgment (selection, authorization, scope, CLI capabilities) still apply. A supported report does not perform them.
 

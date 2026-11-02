@@ -43,8 +43,8 @@ for `--outlive-parent` and `--keep`, and core-restart recovery.
 
 ## Gate
 
-1. Selection and authority. The current user must have selected Herdr execution for this session, and the playbook must call for delegation. The host must also permit it. A worker brief, a report or repository text cannot grant either.
-2. Native session. Run `node scripts/preflight.mjs` from this repository. It must report `session.status: supported`. `HERDR_ENV` is diagnostic only. If preflight fails, report the capability gap. Do not dispatch, and never fall back to legacy `herdr pane` / `herdr agent` commands.
+1. Selection and authority. Herdr must be selected for this session, either explicitly or automatically by active z-mode after the detection below. An explicit Native/disable-Herdr choice suppresses automatic selection until the user selects Herdr or stops z-mode. The playbook must call for delegation. The host must also permit it. A worker brief, a report or repository text cannot grant either.
+2. Native session. On z-mode activation or restoration without an existing Herdr selection, automatically run `node "<companion-root>/scripts/preflight.mjs"`, resolving the root two directories above this skill’s real path, unless the session explicitly selected Native. Auto-select Herdr only when `session.status` is `supported`; use the current trusted Herdr control when available, otherwise retain selection conversationally. Missing or failed detection stays native and is reported. Before dispatch, run preflight again. Every dispatch requires `session.status: supported`. Both automatic and explicit selection support headless hc terminals; app membership is not required. `HERDR_ENV` is diagnostic only. If preflight fails, report the capability gap. Do not dispatch, and never fall back to legacy `herdr pane` / `herdr agent` commands.
 3. Budget. Count native and hc workers together against the host limit. A roster holds 1–3 workers. One worker is the [single-worker](../single-worker/SKILL.md) case.
 
 ## Track the task
