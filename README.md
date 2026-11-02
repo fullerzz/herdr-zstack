@@ -34,6 +34,9 @@ Follow the [installation guide](docs/installation.md) and [mod configuration gui
 `zstack-task-evidence-tabs`. Follow the [shared sidebar recipe](examples/layout-recipe.md)
 to add a collapsible Task & Evidence button beside Files and Changes in a personal layout clone, or the [roster layout recipe](examples/roster-layout.md) to show a run's members beside the coordinator. Installed files are copies; source edits require an explicit update. No installation happens from running tests.
 
+The tab bar also supports [additional sidebar buttons](examples/layout-recipe.md#additional-sidebar-integrations)
+through personal layout configuration, so integrations do not require edits to its installed code.
+
 For the initial development setup, `personal-task-evidence` is a copy of the existing personal layout; switching back to `personal` restores the previous presentation. Task paths are explicit and the viewer does not infer success from agent status.
 
 ## Direction

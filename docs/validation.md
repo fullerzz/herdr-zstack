@@ -1402,3 +1402,38 @@ Z-mode activation/restoration directs the agent to run the installed companion's
 - Shared zstack uses one atomic execution-selection record. Its 100-pair concurrent-control repro lost zero choices; all 150 Python tests and structural validation passed. Legacy controls remain readable and malformed explicit state suppresses automatic selection.
 - `herdr-app check mods/task-evidence` and `just check` passed earlier in this task; no mod source changed. The sandboxed host checker stalled before a bounded unsandboxed rerun passed.
 - Neither plugin was refreshed, no workers were dispatched, and fresh-host activation/dispatch remains untested. The shared repository's broader Node suite encountered an unrelated statechart signal-handling failure/stall; no clean full-suite result is claimed for it.
+
+## Configurable sidebar integrations — 2026-11-02
+
+The tab bar accepts `content.props.extraPanels` in its layout block. Each valid
+entry targets an existing direct child of `panel-body`; reserved and repeated
+IDs, missing children, and malformed configuration are ignored. Extra buttons
+use the existing sidebar switching, collapse and per-space memory. Icons support
+theme-tinted SVG or full-color images. Installation ownership checks are unchanged.
+
+- Both new behavioral tests failed before implementation because the configured
+  buttons were absent, then passed. The tab-bar suite passed all 5 tests, covering
+  navigation, per-space restoration, both icon renderers, malformed configuration,
+  duplicates, missing children, and preservation of Files/Changes preferences.
+- `node --test` passed all 163 tests. `herdr-app check mods/task-evidence-tabs`,
+  `herdr-app check mods/task-evidence`, `just check`, and `git diff --check` passed.
+  Logs: `/private/tmp/herdr-sidebar-{tests,tabs-check,viewer-check,typecheck,diff-check}.log`.
+  Checks ran through task-owned hc terminal `t3t` (exit 0), then it was removed.
+  The first sandboxed native checker stalled with macOS service errors; that
+  task-owned checker was stopped and the unsandboxed checks passed.
+- On Herdr app 0.1.12, a temporary clone of `personal-task-evidence` used a
+  temporary copy of the new tab bar and configured the existing Atuin Threads
+  child through `extraPanels`. Live clicks opened Threads with its full-color
+  turtle icon and asynchronously loaded thread list, collapsed it on a second
+  click, reopened it, switched to Files, and switched to Task & Evidence with its
+  asynchronously loaded board and status artifact. `herdr-app status` reported
+  no errors. Screenshots: `/private/tmp/herdr-sidebar-configured.png` and
+  `/private/tmp/herdr-sidebar-evidence.png`.
+- Restored the original layout and verified its file was byte-for-byte unchanged.
+  The temporary layout, mod, and their local panel-memory state were removed.
+  The installed managed mods, Atuin mod, and personal layout were not updated.
+
+Limits: per-space restoration and malformed configuration have harness coverage;
+they were not exercised live. No restart, theme, remote-machine, or non-macOS
+validation was performed. Existing hardcoded integrations still need the documented
+one-time migration before the installer will accept an update.

@@ -45,3 +45,60 @@ receive future Herdr tab-bar changes; compare against the installed mod when upg
 
 For durable task records, use the task-record props documented by the mod.
 Paths are explicit examples, not task inference; verify space IDs with `herdr-app ls`.
+
+## Additional sidebar integrations
+
+Configure extra buttons in the **tabs block's** `content.props.extraPanels`.
+Each entry names an existing direct child of the `panel-body` stack. The tab
+bar only selects that child; it does not install or configure its mod.
+For example, with an Atuin Threads mod already installed:
+
+```json
+{
+  "id": "tabs",
+  "type": "block",
+  "content": {
+    "mod": "zstack-task-evidence-tabs",
+    "props": {
+      "extraPanels": [
+        {
+          "id": "atuin-threads",
+          "label": "Threads",
+          "icon": "art/atuin-turtle.svg",
+          "iconType": "image"
+        }
+      ]
+    }
+  }
+}
+```
+
+Keep the tabs block's existing size and other properties. Add or retain this
+block beside `files`, `changes`, and `task-evidence` in `panel-body.children`:
+
+```json
+{
+  "id": "atuin-threads",
+  "type": "block",
+  "content": { "mod": "atuin-threads" }
+}
+```
+
+`id` and `label` must be non-empty strings. `icon` is optional and defaults to
+the Files icon; paths resolve from the Herdr app configuration directory.
+`iconType` defaults to `svg` (theme-tinted); `image` preserves the asset's colors,
+including full-color SVGs. The asset must already exist.
+
+Extra buttons appear in configuration order between Changes and Task & Evidence.
+They share the sidebar's collapse, switching, and per-space selection memory.
+Invalid entries, missing child IDs, and repeated IDs are ignored (the first
+valid entry wins). The IDs `files`, `changes`, and `task-evidence` are reserved;
+extras cannot override their buttons or Files/Changes preferences.
+
+Keep integration configuration in your personal layout and integration code/assets
+in their own mod. Updates can then replace the project's tab bar without losing
+your buttons. The installer still refuses modified runtime copies. For an existing
+hardcoded button, back up the modified tab bar and layout, move its configuration
+into `extraPanels`, and restore the original installer-owned tab bar before
+running `just update-sidebar`. Do not discard unrelated custom code: it must be
+preserved or migrated separately. The installer never changes personal layouts.

@@ -46,6 +46,11 @@ To update the Task & Evidence sidebar and its toggle from this checkout, run
 `~/.config/herdr-app` otherwise. Run it again after changing or pulling this
 checkout; it does not fetch Git changes or change your layout configuration.
 
+For other sidebar integrations, configure the tab bar's
+[`extraPanels` layout prop](../examples/layout-recipe.md#additional-sidebar-integrations)
+instead of editing its installed JavaScript. Button configuration then survives
+sidebar updates; integration mods and assets remain separately managed.
+
 Any unowned name collision or edited owned file aborts the entire plan, including
 removal and rollback, before writes. There is no force overwrite. Back up edits
 outside the managed folder and restore the recorded original before retrying;

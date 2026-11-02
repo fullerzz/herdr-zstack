@@ -1,7 +1,7 @@
 // Personal copy of Herdr app 0.1.10 tabs; see NOTICE.md.
 import { View, div, svg, image } from "gpui-kit";
 import { h_flex } from "gpui-base";
-import { spaces, panes, run, openOverlay, theme, window, shared, layout, settings } from "herdr";
+import { spaces, panes, run, openOverlay, theme, window, shared, layout, settings, props } from "herdr";
 
 function find(node, id) {
   if (node?.id === id) return node;
@@ -80,8 +80,20 @@ export default class Tabs extends View {
     const panel = find(root, "panel"), body = find(root, "panel-body");
     const enabled = [...(shared("workspace.panels") ?? ["files", "changes"])];
     if (body?.children?.some(child => child.id === "task-evidence")) enabled.push("task-evidence");
+    const extraPanels = [], configured = props()?.extraPanels;
+    const ids = new Set(["files", "changes", "task-evidence"]);
+    for (const entry of Array.isArray(configured) ? configured : []) {
+      if (!entry || typeof entry.id !== "string" || !entry.id.trim() || ids.has(entry.id)
+        || typeof entry.label !== "string" || !entry.label.trim()
+        || (entry.icon !== undefined && (typeof entry.icon !== "string" || !entry.icon.trim()))
+        || (entry.iconType !== undefined && !["svg", "image"].includes(entry.iconType))
+        || !body?.children?.some(child => child.id === entry.id)) continue;
+      ids.add(entry.id);
+      enabled.push(entry.id);
+      extraPanels.push(entry);
+    }
     this.syncPanel(space, panel, body, enabled);
-    const panelButton = (id, label, icon) => {
+    const panelButton = (id, label, icon = "mods/files/file.svg", iconType = "svg") => {
       const on = panel && !panel.hidden && body?.active === id;
       return h_flex().id(`panel-${id}`).h(26).px(8).gap(5).flex_none().items_center().rounded(6)
         .text_size(12).bg(on ? t.selected : t.chrome).text_color(on ? t.foreground : t.muted)
@@ -89,7 +101,7 @@ export default class Tabs extends View {
         .on_click(() => {
           if (on) run("layout.hide", { id: "panel" });
           else { run("layout.select", { stack: "panel-body", child: id }); run("layout.show", { id: "panel" }); }
-        }).child(svg(icon).size(14)).child(label);
+        }).child(iconType === "image" ? image(icon).size(16).flex_none() : svg(icon).size(14)).child(label);
     };
     return h_flex().size_full().min_w(0).px(10).pl(lightsPadding).gap(3).items_center().bg(t.chrome).border_b(1).border_color(t.border)
       .on_mouse_up("left", () => { this.pressed = null; })
@@ -98,6 +110,7 @@ export default class Tabs extends View {
       .child(button("tab-new", "+", () => openOverlay({ mod: "new-menu", kind: "popup", width: 250, height: 512 })))
       .when(enabled.includes("files"), el => el.child(panelButton("files", "Files", "mods/files/file.svg")))
       .when(enabled.includes("changes"), el => el.child(panelButton("changes", "Changes", "mods/changes/changes.svg")))
+      .children(extraPanels.map(({ id, label, icon, iconType }) => panelButton(id, label, icon, iconType)))
       .when(enabled.includes("task-evidence"), el => el.child(panelButton("task-evidence", "Task & Evidence", "mods/files/file.svg")))
       .when(w?.buttons, el => el.child(button("minimize", w.platform === "windows" ? svg("mods/tabs/win-min.svg").size(16) : "−", () => run("window.minimize")))
         .child(button("maximize", w.platform === "windows" ? svg(`mods/tabs/${w.maximized ? "win-restore" : "win-max"}.svg`).size(16) : "□", () => run("window.maximize")))
