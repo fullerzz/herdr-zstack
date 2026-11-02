@@ -1,6 +1,30 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { parseBoard, readBoard, validateBoard, evidenceFolder, MAX_BOARD } from './board.js';
+import { parseBoard, readBoard, validateBoard, evidenceFolder, completedTask, MAX_BOARD } from './board.js';
+import { readFile } from 'node:fs/promises';
+
+const active = JSON.parse(await readFile(new URL('../../records/fixtures/active.json', import.meta.url), 'utf8'));
+const run = JSON.parse(await readFile(new URL('../../records/fixtures/run.json', import.meta.url), 'utf8'));
+
+test('clear requires completed durable activity, including every valid roster member', async () => {
+  for (const value of [null, '{}', JSON.stringify(active), new Error('offline')]) {
+    assert.equal(await completedTask(async () => { if (value instanceof Error) throw value; return value; }, {record: '/task.json'}), false);
+  }
+  let machine;
+  assert.equal(await completedTask(async (_path, options) => { machine = options.on; return JSON.stringify({...active, activity: 'completed'}); }, {record: '/task.json', machine: 'server'}), true);
+  assert.equal(machine, 'server');
+  const records = Object.fromEntries(run.members.map(member => [`${member.checkout}/.herdr-tasks/${member.taskId}/task.json`, JSON.stringify({
+    ...active, taskId: member.taskId, checkout: member.checkout, coordinator: run.coordinator, machine: run.machine, activity: 'completed',
+  })]));
+  const read = async path => path === '/run.json' ? JSON.stringify(run) : records[path] ?? null;
+  assert.equal(await completedTask(read, {run: '/run.json'}), true);
+  const first = Object.keys(records)[0];
+  records[first] = JSON.stringify({...JSON.parse(records[first]), activity: 'active'});
+  assert.equal(await completedTask(read, {run: '/run.json'}), false);
+  delete records[first];
+  assert.equal(await completedTask(read, {run: '/run.json'}), false);
+  assert.equal(await completedTask(async () => '{}', {run: '/run.json'}), false);
+});
 
 const entry = (id, extra = {}) => ({ label: `Task ${id}`, record: `/repo/.herdr-tasks/${id}/task.json`, machine: null, ...extra });
 const board = tasks => ({ schemaVersion: 1, sequence: 1, tasks });
@@ -19,9 +43,15 @@ test('a board names exactly one absolute record or run per entry', () => {
 });
 
 test('reading a board distinguishes missing, malformed and unavailable files', async () => {
-  assert.match((await readBoard(async () => null, '/b.json')).state, /no tracked tasks yet/);
-  assert.match((await readBoard(async () => '{"schemaVersion":1}', '/b.json')).state, /Malformed board/);
-  assert.match((await readBoard(async () => { throw new Error('denied'); }, '/b.json')).state, /unavailable: Error: denied/);
+  const missing = await readBoard(async () => null, '/b.json');
+  assert.match(missing.state, /no tracked tasks yet/);
+  assert.deepEqual(missing.tasks, [], 'a missing board lists no tasks');
+  const malformed = await readBoard(async () => '{"schemaVersion":1}', '/b.json');
+  assert.match(malformed.state, /Malformed board/);
+  const unavailable = await readBoard(async () => { throw new Error('denied'); }, '/b.json');
+  assert.match(unavailable.state, /unavailable: Error: denied/);
+  assert.equal(malformed.tasks, null, 'unknown contents are not an empty board');
+  assert.equal(unavailable.tasks, null);
   let on;
   const { tasks } = await readBoard(async (_path, options) => { on = options.on; return JSON.stringify(board([entry('a', { machine: 'server' })])); }, '/b.json');
   assert.equal(on, null, 'the board itself is always read on this computer');

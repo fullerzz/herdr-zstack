@@ -1342,3 +1342,29 @@ Merging main's decision logs (#33) into the branch brought `decisions.js` under 
 Review fix: cubic noted that `taskChoices` passed layout `machine` values through unchecked while its type promised `string | null`. Layout task entries now follow the board's rule: `machine` is absent, null, or a non-empty name, and any other entry is ignored. A new assertion in `model.test.mjs` failed before the fix and passes after it. `node --test` passed all 144 tests, and `just check`, `herdr-app check mods/task-evidence` and `git diff --check` passed.
 
 Limits: apart from that test and the `machine` rule, the edits add only comments, casts and split `let` declarations, with no runtime behavior change, so the running UI was not re-inspected. Test files, `mods/task-evidence-tabs`, `scripts/`, `records/` and `workflows/` are not type-checked. `skipLibCheck` skips the generated host declarations, which have their own errors under this config. The theme colors are cast to `Color` because `theme()` is declared as plain strings.
+
+### Clear completed tracked tasks — 2026-11-01
+
+Added Clear beside Refresh. It rereads board entries and dismisses only valid records reporting `completed`; every roster member must meet that condition. Layout-configured tasks and entries with incomplete or unreadable records remain. Dismissals survive Refresh and board notifications for this panel copy, and reset on panel reload. No board or evidence files are changed.
+
+`node --test mods/task-evidence/*.test.mjs` passed 64 tests (exit 0), including completed versus active/missing/malformed/offline records, remote read routing, mixed and incomplete rosters, duplicate clicks, selection fallback, stale reads, and returning to manual evidence. `just check`, `herdr-app check mods/task-evidence`, and `git diff --check` passed (exit 0). The check used Homebrew Node and a temporary npm cache because the sandbox blocks the mise shim and default npm cache. The sandboxed native checker stalled on macOS UI services; its exact process was terminated and the escalated checker passed.
+
+The installer preview and apply changed only installed `zstack-task-evidence/main.js` and `board.js`. The running `personal-task-evidence` layout showed Clear next to Refresh and a completed record with its status artifact after asynchronous reads; `herdr-app status` reported no errors. Screenshot: `/private/tmp/herdr-zstack-clear.png`. Live clicks, selection changes and Refresh were not automated on the user's display; those transitions have harness coverage, not live UI proof.
+
+The full integration suite, `node --test mods/*/*.test.mjs records/*.test.mjs scripts/*.test.mjs workflows/*.test.mjs`, also passed all 147 tests (exit 0), covering the board's CLI consumers and installer.
+
+Work stayed direct, with no worker terminals. Task record: `.herdr-tasks/clear-completed-20261101/task.json`; automatic approval review rejected adding its shared board entry, so no board-write retry was made. No commits or publication were requested.
+
+#### Interrogation fixes after rebase
+
+Rebased `clear-btn` onto freshly fetched `origin/main` at `deb3262`, preserving all six uncommitted feature files byte-for-byte. Dismissals now recheck completed activity on board rereads and Refresh, so a rolling roster with new active work reappears. Entries removed from the board lose their dismissal and hidden count. An async request token prevents an older recheck from replacing a newer board selection.
+
+Both new behavioral regressions failed before the fixes and passed afterward. A third regression covers a delayed recheck finishing after the entry was removed. All 150 tests in `node --test mods/*/*.test.mjs records/*.test.mjs scripts/*.test.mjs workflows/*.test.mjs` passed (exit 0; `/private/tmp/clear-fixes-full-suite.log`). Both adversaries' original repro files, with only import paths retargeted to this checkout, passed all four assertions (`/private/tmp/clear-fixed-repros/`). `just check`, `herdr-app check mods/task-evidence`, and `git diff --check` passed (exit 0).
+
+The installer updated only installed `zstack-task-evidence/main.js`. The running panel rendered Clear and Refresh with a completed task's status artifact after async reads, and `herdr-app status` reported no errors. Screenshot: `/private/tmp/herdr-clear-fixed.png`. Live clicks and restored-roster transitions remain harness-verified only. Changes remain uncommitted and unpublished.
+
+#### PR #35 review fixes
+
+The board loop now arms its folder watch before each board read, so a board write during the read or a dismissal recheck starts another pass instead of waiting for an unrelated later write. The installed `herdr.d.ts` already says `watchFolder` returns changes made since the previous call, which narrows this gap on the real host; arming first also covers the first call and the switch from the parent folder to the board folder. `readBoard` now returns null tasks for an unavailable or malformed board. That board lists no entries but removes no dismissal, including through Refresh, so completed entries stay hidden once it reads again.
+
+The two new panel regressions, and the updated `readBoard` assertion, failed with only `main.js` and `board.js` reverted, and pass with the fixes. `node --test mods/task-evidence/*.test.mjs` passed 69 tests, and the full suite, `node --test mods/*/*.test.mjs records/*.test.mjs scripts/*.test.mjs workflows/*.test.mjs`, passed 152 (exit 0). `just check`, `herdr-app check mods/task-evidence`, and `git diff --check` passed (exit 0). The installed mod was not updated and the running UI was not re-inspected; these changes affect watch timing and the unreadable-board path, which have harness coverage only.
