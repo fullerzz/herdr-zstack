@@ -4,7 +4,7 @@ import { agents, spaces, terminals, theme, readTextFile, run, props, watchFolder
 import { filesFor, taskSpace, taskChoices, recordFiles, taskActivity } from "./model.js";
 
 import { readMember, readRoster, rosterFacts, factKey } from "./roster.js";
-import { readBoard, boardKey, evidenceFolder, parentFolder } from "./board.js";
+import { readBoard, boardKey, completedTask, evidenceFolder, parentFolder } from "./board.js";
 import { parseDecisions, evidencePointers } from "./decisions.js";
 /** @import { AsyncContext, ClickEvent, Color, Context } from "gpui-kit" */
 /** @import { EvidenceFile, PanelConfig, TaskChoice } from "./model.js" */
@@ -23,6 +23,11 @@ export default class TaskEvidence extends View {
     this.configured = taskChoices(this.config);
     /** @type {TaskChoice[]} */
     this.tasks = this.configured;
+    /** @type {TaskChoice[]} */
+    this.boardTasks = [];
+    /** @type {Set<string>} */
+    this.cleared = new Set();
+    this.clearing = false;
     /** @type {number} */
     this.taskIndex = 0;
     /** @type {RunIndex | null} */
@@ -57,7 +62,8 @@ export default class TaskEvidence extends View {
         const { tasks, state } = await readBoard(readTextFile, this.config.board);
         if (this.closed || this.boardWatch !== token) return;
         this.boardState = state;
-        this.applyBoard(cx, tasks);
+        await this.applyBoard(cx, tasks);
+        if (this.closed || this.boardWatch !== token) return;
         cx.notify();
         // Before the first task creates the board folder, watch its parent so
         // that first task still appears without a Refresh.
@@ -76,8 +82,18 @@ export default class TaskEvidence extends View {
   }
 
   /** @param {Context} cx @param {TaskChoice[]} boardTasks */
-  applyBoard(cx, boardTasks) {
-    const next = [...this.configured, ...boardTasks];
+  async applyBoard(cx, boardTasks) {
+    const request = this.boardRequest = (this.boardRequest ?? 0) + 1;
+    this.boardTasks = boardTasks;
+    const keys = new Set(boardTasks.map(boardKey));
+    for (const key of this.cleared) if (!keys.has(key)) this.cleared.delete(key);
+    // A rolling run reuses its path for new work; a dismissal is not permanent.
+    for (const task of boardTasks.filter(task => this.cleared.has(boardKey(task)))) {
+      const completed = await completedTask(readTextFile, task);
+      if (this.closed || request !== this.boardRequest) return;
+      if (!completed) this.cleared.delete(boardKey(task));
+    }
+    const next = [...this.configured, ...boardTasks.filter(task => !this.cleared.has(boardKey(task)))];
     if (JSON.stringify(next) === JSON.stringify(this.tasks)) return;
     const current = this.tasks[this.taskIndex];
     this.tasks = next;
@@ -94,6 +110,26 @@ export default class TaskEvidence extends View {
         memberIndex: 0, record: null, recordState: null, recordAt: null, files: filesFor(this.config), selected: 0 });
       this.load(cx);
     }
+  }
+
+  /** @param {Context} cx */
+  clearCompleted(cx) {
+    if (this.clearing) return;
+    this.clearing = true;
+    const candidates = this.tasks.filter(task => task.board);
+    cx.spawn(async cx => {
+      try {
+        for (const task of candidates) {
+          if (await completedTask(readTextFile, task)) this.cleared.add(boardKey(task));
+        }
+        if (this.closed) return;
+        await this.applyBoard(cx, this.boardTasks);
+      } finally {
+        this.clearing = false;
+        if (!this.closed) cx.notify();
+      }
+    });
+    cx.notify();
   }
 
   // A local board roster may keep its members in separate checkouts. Retain
@@ -280,14 +316,26 @@ export default class TaskEvidence extends View {
     return v_flex().size_full().min_h(0).bg(t.surface).text_color(t.foreground).text_size(12).p(12).gap(9)
       .child(h_flex().flex_shrink_0().items_center().justify_between()
         .child(div().font_semibold().text_size(15).child("Task & Evidence"))
-        .child(action("refresh", "Refresh", (_event, cx) => {
-          if (this.config.board?.startsWith?.("/") && !this.boardWatch) this.watchBoard(cx);
-          this.tasks.length ? this.loadTask(cx) : this.load(cx); cx.notify();
-        })))
+        .child(h_flex().gap(4)
+          .child(action("clear", this.clearing ? "Clearing…" : "Clear", (_event, cx) => this.clearCompleted(cx)))
+          .child(action("refresh", "Refresh", (_event, cx) => {
+            if (this.config.board?.startsWith?.("/") && !this.boardWatch) this.watchBoard(cx);
+            if (this.cleared.size) {
+              cx.spawn(async cx => {
+                await this.applyBoard(cx, this.boardTasks);
+                if (this.closed) return;
+                this.tasks.length ? this.loadTask(cx) : this.load(cx);
+                cx.notify();
+              });
+              return;
+            }
+            this.tasks.length ? this.loadTask(cx) : this.load(cx); cx.notify();
+          }))))
       .child(v_flex().id("metadata").flex_1().min_h(0).overflow_y_scrollbar()
         .child(v_flex().flex_shrink_0().gap(9)
           .child(div().text_color(t.muted).child(this.config.title || this.config.folder || "No task configured"))
           .when(Boolean(this.boardState), el => el.child(div().text_color(t.dim).child(this.boardState)))
+          .when(this.cleared.size > 0, el => el.child(div().text_color(t.dim).child(`${this.cleared.size} completed entries hidden until panel reload.`)))
           .child(v_flex().gap(3).children(this.tasks.map((task, index) => action(`task-${index}`, task.label || task.record || task.run, (_event, cx) => {
             this.taskIndex = index; this.loadTask(cx); cx.notify();
           }, index === this.taskIndex))))

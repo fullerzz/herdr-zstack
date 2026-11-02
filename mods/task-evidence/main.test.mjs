@@ -93,6 +93,41 @@ test("explicit remote machine is passed to file reader", async () => {
 });
 
 const active = JSON.parse(await readFile(new URL('../../records/fixtures/active.json', import.meta.url), 'utf8'));
+test('Clear dismisses completed board tasks, preserves other entries and ignores stale reads', async () => {
+  const p = await panel(async path => path === '/done.json' ? JSON.stringify({...active, activity: 'completed'}) : path === '/active.json' ? JSON.stringify(active) : null,
+    {tasks: [{record: '/configured.json'}]});
+  const boardTasks = [{record: '/done.json', board: true}, {record: '/active.json', board: true}, {record: '/missing.json', board: true}];
+  p.instance.applyBoard(p.cx, boardTasks);
+  p.instance.taskIndex = 1;
+  p.instance.loadTask(p.cx);
+  const stale = p.callbacks.pop();
+  p.callbacks.length = 0;
+  const tree = p.instance.render(p.cx);
+  byId(tree, 'clear').styles.on_click[0](undefined, p.cx);
+  byId(tree, 'clear').styles.on_click[0](undefined, p.cx);
+  assert.equal(p.callbacks.length, 1, 'duplicate clicks start only one clear');
+  await p.callbacks.shift()(p.cx);
+  assert.deepEqual(p.instance.tasks.map(task => task.record), ['/configured.json', '/active.json', '/missing.json']);
+  assert.equal(p.instance.taskIndex, 0);
+  await stale(p.cx);
+  assert.equal(p.instance.record, null, 'dismissed task read cannot replace the new selection');
+  p.instance.applyBoard(p.cx, boardTasks);
+  byId(p.instance.render(p.cx), 'refresh').styles.on_click[0](undefined, p.cx);
+  assert.equal(p.instance.tasks.some(task => task.record === '/done.json'), false, 'board notifications and Refresh keep it dismissed');
+  p.cleanup();
+});
+
+test('clearing the last board task returns to manual evidence', async () => {
+  const p = await panel(async () => JSON.stringify({...active, activity: 'completed'}));
+  p.instance.applyBoard(p.cx, [{record: '/done.json', board: true}]);
+  p.callbacks.length = 0;
+  p.instance.clearCompleted(p.cx);
+  await p.callbacks.shift()(p.cx);
+  assert.deepEqual(p.instance.tasks, []);
+  assert.equal(p.instance.record, null);
+  assert.equal(p.instance.files[0].path, '/notes.md');
+  p.cleanup();
+});
 test('long metadata and artifact selectors stay in a separate bounded scroll region', async () => {
   const p = await panel(async () => 'document', {artifacts: Array.from({length: 20}, (_, i) => ({path: `/long/worker/evidence/${i}.md`}))});
   p.instance.record = {...active, worker: {core: 'long-core/'.repeat(40), terminal: 't1', occupant: 'long-occupant/'.repeat(40)}};
@@ -154,7 +189,7 @@ const rosterFiles = (overrides = {}) => ({
   ...overrides,
 });
 const texts = node => typeof node === 'string' ? [node] : node.items.flatMap(texts);
-const byId = (node, id) => typeof node === 'string' ? null : node.styles.id?.[0] === id ? node : node.items.map(child => byId(child, id)).find(Boolean) ?? null;
+function byId(node, id) { return typeof node === 'string' ? null : node.styles.id?.[0] === id ? node : node.items.map(child => byId(child, id)).find(Boolean) ?? null; }
 async function rosterPanel(entries) {
   const reads = [];
   const p = await panel(async path => { reads.push(path); return entries[path] ?? null; }, {tasks: [{label: 'Roster', run: '/idx/run.json'}]});
@@ -298,6 +333,74 @@ test('board tasks appear after the board is read and select the newest entry', a
   await flush();
   assert.deepEqual(p.watches.map(w => w.path), ['/state/herdr-zstack', '/repo/.herdr-tasks']);
   await p.close();
+});
+
+test('board notifications and Refresh restore a cleared roster with new active work', async () => {
+  for (const refresh of [false, true]) {
+    const entries = rosterFiles(Object.fromEntries(run.members.map(member => [memberPath(member.taskId),
+      JSON.stringify({...active, taskId: member.taskId, checkout: member.checkout, activity: 'completed'})])));
+    entries[boardPath] = JSON.stringify({schemaVersion: 1, sequence: 1, tasks: [{label: 'Roster', run: '/idx/run.json'}]});
+    const p = await boardPanel(entries);
+    try {
+      p.callbacks.length = 0;
+      byId(p.instance.render(p.cx), 'clear').styles.on_click[0](undefined, p.cx);
+      await p.callbacks.shift()(p.cx);
+      assert.deepEqual(p.instance.tasks, []);
+      p.callbacks.length = 0;
+      p.entries['/idx/run.json'] = JSON.stringify({...run, sequence: run.sequence + 1, members: [run.members[0]]});
+      p.entries[memberPath(run.members[0].taskId)] = JSON.stringify({...active, taskId: run.members[0].taskId, activity: 'active'});
+      if (refresh) {
+        byId(p.instance.render(p.cx), 'refresh').styles.on_click[0](undefined, p.cx);
+        await p.callbacks.shift()(p.cx);
+      } else {
+        p.watches.findLast(w => w.path === '/state/herdr-zstack').resolve([boardPath]);
+        await flush();
+      }
+      assert.equal(p.instance.tasks[0]?.label, 'Roster', refresh ? 'Refresh restores active work' : 'board reread restores active work');
+      assert.equal(p.instance.cleared.size, 0);
+    } finally { await p.close(); }
+  }
+});
+
+test('board removals prune the hidden count and allow readded entries to appear', async () => {
+  const p = await boardPanel({[boardPath]: boardFile(['a']), [boardRecord('a')]: JSON.stringify({...JSON.parse(boardTask('a')), activity: 'completed'})});
+  try {
+    p.callbacks.length = 0;
+    p.instance.clearCompleted(p.cx);
+    await p.callbacks.shift()(p.cx);
+    assert.equal(p.instance.cleared.size, 1);
+    p.callbacks.length = 0;
+    p.entries[boardPath] = boardFile([]);
+    p.watches.findLast(w => w.path === '/state/herdr-zstack').resolve([boardPath]);
+    await flush();
+    assert.equal(p.instance.cleared.size, 0);
+    assert.equal(texts(p.instance.render(p.cx)).some(line => /hidden until panel reload/.test(line)), false);
+    p.entries[boardPath] = boardFile(['a']);
+    p.watches.findLast(w => w.path === '/state/herdr-zstack').resolve([boardPath]);
+    await flush();
+    assert.equal(p.instance.tasks[0]?.label, 'Task a');
+  } finally { await p.close(); }
+});
+
+test('a slow dismissal recheck cannot restore an entry removed by a newer board read', async () => {
+  let finish;
+  const p = await panel(async () => JSON.stringify({...active, activity: 'completed'}));
+  try {
+    const tasks = [{record: '/done.json', board: true}];
+    await p.instance.applyBoard(p.cx, tasks);
+    p.callbacks.length = 0;
+    p.instance.clearCompleted(p.cx);
+    await p.callbacks.shift()(p.cx);
+    assert.equal(p.instance.cleared.size, 1);
+    p.host.read = () => new Promise(resolve => { finish = resolve; });
+    const previous = p.instance.applyBoard(p.cx, tasks);
+    await p.instance.applyBoard(p.cx, []);
+    finish(JSON.stringify(active));
+    await previous;
+    assert.deepEqual(p.instance.tasks, []);
+    assert.deepEqual(p.instance.boardTasks, []);
+    assert.equal(p.instance.cleared.size, 0);
+  } finally { p.cleanup(); }
 });
 
 test('a change in the task evidence folder rereads the record and status, keeping them visible', async () => {

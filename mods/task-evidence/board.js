@@ -1,6 +1,7 @@
 // Pure board helpers: no host imports, safe in the read-only GPUI runtime.
 // A board is an explicit, coordinator-written list of task records and run
 // indexes. It lists where to read; it never states activity or acceptance.
+import { readMember, readRoster } from "./roster.js";
 export const MAX_BOARD = 50;
 
 /** @import { TaskChoice } from "./model.js" */
@@ -56,6 +57,14 @@ export function validateBoard(board) {
 
 /** @param {Pick<BoardEntry, "record" | "run" | "machine">} task */
 export const boardKey = task => JSON.stringify([task.record ?? null, task.run ?? null, task.machine ?? null]);
+
+/** @param {ReadText} read @param {TaskChoice} task */
+export async function completedTask(read, task) {
+  const machine = task.machine ?? null;
+  const members = task.run ? (await readRoster(read, task.run, machine)).members :
+    [await readMember(read, task.record, machine)];
+  return members.length > 0 && members.every(member => member.record?.activity === "completed");
+}
 
 /**
  * @param {string} source
