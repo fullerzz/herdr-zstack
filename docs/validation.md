@@ -1380,3 +1380,13 @@ The user then ran `just install`, which wrote only installed `zstack-task-eviden
 The user then clicked ✕ in the running panel: the confirmation appeared, and confirming removed the entry. Afterwards `board.json` was valid, listed three entries (down from five), had `sequence` 9, and kept mode `0600`; no stray `.lock` or temporary file remained.
 
 Limits: no live stale-snapshot rejection or busy-lock refusal has been observed; those remain harness-verified only.
+
+#### PR #36 review fixes
+
+pullfrog raised two findings, and both held against the code. First, the host's `writeTextFile` (herdr-app `src/mod_files.rs` at `f896da4`, lines 69–72) compares the target and then renames over it, serialized only by an in-process mutex. A CLI `updateBoard` that commits between the two is overwritten, so the panel's board write could lose a coordinator's addition. The panel cannot share the CLI's `.lock` because the host has no delete. Second, the post-removal board reread had no ordering against watcher reads, so a slow read could restore an older list.
+
+The panel no longer writes `board.json`. A confirmed removal goes to `board.removed.json` beside the board, which only Herdr writes, and `readBoard` hides listed entries. Each removal names the entry's `added` sequence, which `task.mjs` now sets on every addition, so a re-added record or run shows again. Board reads take an order token before reading, and only the newest applies.
+
+Regressions: a model of the host write that commits a real `updateBoard` between its compare and rename keeps the CLI's addition. Restoring the previous board-writing `removeEntry` loses it (`actual: [ 'Task b' ]`). A delayed post-removal read resolving after a watcher read keeps the newer list. Removing the order check makes it fail. `node --test mods/task-evidence/*.test.mjs` passed 76 tests, and the full suite passed 159. `just check`, `herdr-app check mods/task-evidence` and `git diff --check` passed (exit 0).
+
+Limits: the installed mod was not updated in this pass, and the running UI was not re-inspected. Existing board entries have no `added` until a coordinator adds them again; a removal of such an entry names `added: null`.

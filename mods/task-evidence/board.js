@@ -13,6 +13,7 @@ export const MAX_BOARD = 50;
  * @property {string} [record] Exactly one of `record` and `run`, absolute.
  * @property {string} [run]
  * @property {string | null} [machine] The machine that owns the entry's files; null is this computer.
+ * @property {number} [added] The board sequence that added the entry, so a re-added entry is new.
  */
 
 /**
@@ -48,6 +49,7 @@ export function validateBoard(board) {
     if (absolute(task.record) === absolute(task.run) || [task.record, task.run].some(v => v !== undefined && !absolute(v)))
       errors.push(`task ${index}: name exactly one absolute record or run`);
     if (task.machine !== undefined && task.machine !== null && !text(task.machine)) errors.push(`task ${index}: machine must be null or a name`);
+    if (task.added !== undefined && !(Number.isSafeInteger(task.added) && task.added > 0)) errors.push(`task ${index}: added must be a positive sequence`);
     const key = boardKey(task);
     if (seen.has(key)) errors.push(`task ${index}: duplicate entry`);
     seen.add(key);
@@ -92,13 +94,49 @@ export async function readBoard(read, path) {
   if (source === null) return { tasks: [], state: "Board has no tracked tasks yet." };
   const { board, errors } = parseBoard(source);
   if (!board) return { tasks: null, state: `Malformed board: ${errors.join("; ")}` };
-  const tasks = board.tasks.map(task => ({ label: task.label, ...(task.record ? { record: task.record } : { run: task.run }),
-    machine: task.machine ?? null, board: true }));
-  return { tasks, state: `Board: ${tasks.length} tracked task${tasks.length === 1 ? "" : "s"}. Activity is reported, never acceptance.` };
+  const listed = board.tasks.map(task => ({ label: task.label, ...(task.record ? { record: task.record } : { run: task.run }),
+    machine: task.machine ?? null, added: task.added ?? null, board: true }));
+  let removals;
+  try { removals = parseRemovals(await read(removedPath(path), { on: null })); }
+  catch (error) { removals = { removed: null, errors: [String(error)] }; }
+  // An unreadable removal list hides nothing: showing a removed entry loses nothing.
+  const hidden = new Set((removals.removed ?? []).map(removalKey));
+  const tasks = listed.filter(task => !hidden.has(removalKey(task)));
+  const note = removals.removed ? "" : ` Removed-task list unreadable (${removals.errors.join("; ")}); showing every entry.`;
+  return { tasks, state: `Board: ${tasks.length} tracked task${tasks.length === 1 ? "" : "s"}. Activity is reported, never acceptance.${note}` };
 }
 
 /**
- * The host's `writeTextFile`: replaces `path` only while it still holds `expected`.
+ * An entry the panel removed. `added` ties it to one addition, so the entry
+ * shows again when a coordinator adds it anew.
+ * @typedef {Pick<BoardEntry, "record" | "run"> & { machine: string | null, added: number | null }} Removal
+ */
+
+// The panel never writes the board: the host's conditional write checks and then
+// renames, and Herdr serializes it only against its own writes, so a CLI commit
+// between the two would be lost. Removals go to this panel-owned file instead.
+/** @param {string} path The board file. */
+export const removedPath = path => path.replace(/(\.json)?$/, ".removed.json");
+
+/** @param {Pick<BoardEntry, "record" | "run" | "machine" | "added">} task */
+const removalKey = task => JSON.stringify([task.record ?? null, task.run ?? null, task.machine ?? null, task.added ?? null]);
+
+/**
+ * @param {string | null} source
+ * @returns {{ removed: Removal[] | null, errors: string[] }} Null removals when malformed.
+ */
+export function parseRemovals(source) {
+  if (source === null) return { removed: [], errors: [] };
+  let value;
+  try { value = JSON.parse(source); } catch { return { removed: null, errors: ["invalid JSON"] }; }
+  if (value?.schemaVersion !== 1 || !Array.isArray(value.removed)) return { removed: null, errors: ["expected schemaVersion 1 and a removed list"] };
+  const valid = value.removed.every((/** @type {any} */ r) => r !== null && typeof r === "object" && absolute(r.record) !== absolute(r.run)
+    && (r.machine === null || text(r.machine)) && (r.added === null || (Number.isSafeInteger(r.added) && r.added > 0)));
+  return valid ? { removed: value.removed, errors: [] } : { removed: null, errors: ["malformed removal"] };
+}
+
+/**
+ * The host's `writeTextFile`: replaces `path` only while it still holds `expected`; null creates it.
  * @callback WriteText
  * @param {string} path
  * @param {string} text
@@ -106,30 +144,35 @@ export async function readBoard(read, path) {
  * @returns {Promise<unknown>}
  */
 
-// The panel's only write. The host cannot delete files, so the panel cannot take
-// the CLI's board lock; it refuses while one is held, and the compare-and-swap
-// refuses a board that changed since this read. A CLI update that read the board
-// before this write can still restore the entry, never lose its own change.
 /**
+ * Records a board entry as removed in the panel-owned list. Only Herdr writes
+ * that list, so its conditional write is serialized. Removals of entries no
+ * longer on the board are dropped, which keeps the list as small as the board.
  * @param {ReadText} read
  * @param {WriteText} write
  * @param {string} path The board file on this computer.
- * @param {string} key The {@link boardKey} of the entry to remove.
- * @returns {Promise<string | null>} Why nothing was removed, or null once the entry is gone.
+ * @param {Pick<TaskChoice, "record" | "run" | "machine"> & { added?: number | null }} task
+ * @returns {Promise<string | null>} Why nothing was removed, or null once the entry is hidden.
  */
-export async function removeEntry(read, write, path, key) {
-  let source;
+export async function removeEntry(read, write, path, task) {
+  const listPath = removedPath(path);
+  let boardSource, listSource;
   try {
-    if (await read(`${path}.lock`, { on: null }) !== null) return "Board is busy; try again.";
-    source = await read(path, { on: null });
+    boardSource = await read(path, { on: null });
+    listSource = await read(listPath, { on: null });
   } catch (error) { return `Board unavailable: ${String(error)}`; }
-  if (source === null) return null;
-  const { board, errors } = parseBoard(source);
-  if (!board) return `Malformed board: ${errors.join("; ")}`;
-  const tasks = board.tasks.filter(task => boardKey(task) !== key);
-  if (tasks.length === board.tasks.length) return null;
-  try { await write(path, `${JSON.stringify({ ...board, sequence: board.sequence + 1, tasks }, null, 2)}\n`, source); }
-  catch (error) { return `Board changed before removal; try again (${String(error)}).`; }
+  const { board, errors } = boardSource === null ? { board: null, errors: [] } : parseBoard(boardSource);
+  if (boardSource !== null && !board) return `Malformed board: ${errors.join("; ")}`;
+  const key = removalKey(task);
+  const onBoard = new Set((board?.tasks ?? []).map(removalKey));
+  if (!onBoard.has(key)) return null;
+  const { removed, errors: listErrors } = parseRemovals(listSource);
+  if (!removed) return `Malformed removed-task list: ${listErrors.join("; ")}; it was not changed.`;
+  const kept = removed.filter(r => onBoard.has(removalKey(r)) && removalKey(r) !== key);
+  /** @type {Removal} */
+  const entry = { ...(task.record ? { record: task.record } : { run: task.run }), machine: task.machine ?? null, added: task.added ?? null };
+  try { await write(listPath, `${JSON.stringify({ schemaVersion: 1, removed: [...kept, entry] }, null, 2)}\n`, listSource); }
+  catch (error) { return `Removed-task list changed; try again (${String(error)}).`; }
   return null;
 }
 

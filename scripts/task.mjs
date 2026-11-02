@@ -91,8 +91,9 @@ function boardEntry(values) {
 }
 
 // The newest entry goes first. The board keeps its newest MAX_BOARD entries.
-export const addEntry = entry => tasks =>
-  [entry, ...tasks.filter(task => boardKey(task) !== boardKey(entry))].slice(0, MAX_BOARD);
+// `added` marks this addition, so an entry the panel removed shows again.
+export const addEntry = entry => (tasks, sequence) =>
+  [{ ...entry, added: sequence }, ...tasks.filter(task => boardKey(task) !== boardKey(entry))].slice(0, MAX_BOARD);
 
 export async function main(argv, { env = process.env, cwd = process.cwd(), now = () => new Date().toISOString(), out = console.log } = {}) {
   const { values, positionals } = parseArgs({ args: argv, options, allowPositionals: true });

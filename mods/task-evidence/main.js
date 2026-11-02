@@ -69,17 +69,14 @@ export default class TaskEvidence extends View {
         // recheck starts another pass. Before the first task creates the board
         // folder, watch its parent so that first task still appears without a Refresh.
         const changed = watchFolder(folder).catch(() => watchFolder(parentFolder(folder))).then(() => /** @type {const} */ (false), (/** @type {unknown} */ error) => ({ error }));
-        const { tasks, state } = await readBoard(readTextFile, this.config.board);
-        if (this.closed || this.boardWatch !== token) return;
-        this.boardState = state;
-        await this.applyBoard(cx, tasks);
+        await this.readBoardNow(cx);
         if (this.closed || this.boardWatch !== token) return;
         cx.notify();
         const failed = await changed;
         if (failed) {
           if (this.boardWatch !== token) return;
           this.boardWatch = null;
-          this.boardState = `${state} Not watching the board (${String(failed.error)}); Refresh rereads it.`;
+          this.boardState = `${this.boardState ?? ""} Not watching the board (${String(failed.error)}); Refresh rereads it.`;
           cx.notify();
           return;
         }
@@ -144,21 +141,29 @@ export default class TaskEvidence extends View {
     cx.notify();
   }
 
-  // Removes a confirmed entry from the board file. Its record and evidence stay.
+  // Board reads can finish out of order; only the newest read is applied.
+  /** @param {Context} cx */
+  async readBoardNow(cx) {
+    const read = this.boardRead = (this.boardRead ?? 0) + 1;
+    const { tasks, state } = await readBoard(readTextFile, this.config.board);
+    if (this.closed || read !== this.boardRead) return;
+    this.boardState = state;
+    await this.applyBoard(cx, tasks);
+  }
+
+  // Hides a confirmed board entry through the panel's removal list. The board
+  // file, record and evidence stay unchanged.
   /** @param {Context} cx @param {TaskChoice} task */
   removeTask(cx, task) {
     if (this.removing) return;
     this.removing = true;
     cx.spawn(async cx => {
       try {
-        this.removeState = await removeEntry(readTextFile, writeTextFile, this.config.board, boardKey(task));
+        this.removeState = await removeEntry(readTextFile, writeTextFile, this.config.board, task);
         if (this.closed) return;
         this.confirmRemove = null;
         // The board watch rereads too; this covers a board that cannot be watched.
-        const { tasks, state } = await readBoard(readTextFile, this.config.board);
-        if (this.closed) return;
-        this.boardState = state;
-        await this.applyBoard(cx, tasks);
+        await this.readBoardNow(cx);
       } finally {
         this.removing = false;
         if (!this.closed) cx.notify();
