@@ -154,3 +154,30 @@ test('a board entry may record the sequence that added it', () => {
   assert.deepEqual(validateBoard(board([entry('a', { added: 3 })])), []);
   for (const added of [0, -1, 1.5, '3', null]) assert.ok(validateBoard(board([entry('a', { added })])).length, String(added));
 });
+
+test('a removal never prunes a newer removal against an older board read', async t => {
+  const dir = await mkdtemp(join(tmpdir(), 'board-'));
+  t.after(() => rm(dir, { recursive: true, force: true }));
+  const path = join(dir, 'board.json');
+  await updateBoard(path, addEntry(entry('a')));
+  const [a] = (await readBoard(fsRead, path)).tasks;
+  let resume, paused;
+  const reached = new Promise(resolve => { paused = resolve; });
+  // Pause the first removal after its first read; then the CLI adds c and a second panel removes it.
+  let reads = 0;
+  const slowRead = async (p, options) => {
+    const text = await fsRead(p, options);
+    if (++reads === 1) { paused(); await new Promise(resolve => { resume = resolve; }); }
+    return text;
+  };
+  const first = removeEntry(slowRead, hostWrite(), path, a);
+  await reached;
+  await updateBoard(path, addEntry(entry('c')));
+  const c = (await readBoard(fsRead, path)).tasks.find(task => task.label === 'Task c');
+  assert.equal(await removeEntry(fsRead, hostWrite(), path, c), null);
+  resume();
+  assert.match(await first, /Removed-task list changed; try again/, 'the older removal is refused, not pruned in');
+  assert.deepEqual((await readBoard(fsRead, path)).tasks.map(task => task.label), ['Task a']);
+  assert.equal(await removeEntry(fsRead, hostWrite(), path, a), null, 'a retry succeeds');
+  assert.deepEqual((await readBoard(fsRead, path)).tasks, []);
+});

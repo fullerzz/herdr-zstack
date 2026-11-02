@@ -157,9 +157,11 @@ export function parseRemovals(source) {
 export async function removeEntry(read, write, path, task) {
   const listPath = removedPath(path);
   let boardSource, listSource;
+  // Read the list first: a removal committed after this read fails the
+  // conditional write, so pruning never drops it against an older board.
   try {
-    boardSource = await read(path, { on: null });
     listSource = await read(listPath, { on: null });
+    boardSource = await read(path, { on: null });
   } catch (error) { return `Board unavailable: ${String(error)}`; }
   const { board, errors } = boardSource === null ? { board: null, errors: [] } : parseBoard(boardSource);
   if (boardSource !== null && !board) return `Malformed board: ${errors.join("; ")}`;
