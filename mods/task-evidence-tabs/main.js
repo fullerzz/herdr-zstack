@@ -79,9 +79,8 @@ export default class Tabs extends View {
       : 10;
     const panel = find(root, "panel"), body = find(root, "panel-body");
     const enabled = [...(shared("workspace.panels") ?? ["files", "changes"])];
-    if (body?.children?.some(child => child.id === "task-evidence")) enabled.push("task-evidence");
     const extraPanels = [], configured = props()?.extraPanels;
-    const ids = new Set(["files", "changes", "task-evidence"]);
+    const ids = new Set(["files", "changes"]);
     for (const entry of Array.isArray(configured) ? configured : []) {
       if (!entry || typeof entry.id !== "string" || !entry.id.trim() || ids.has(entry.id)
         || typeof entry.label !== "string" || !entry.label.trim()
@@ -111,7 +110,6 @@ export default class Tabs extends View {
       .when(enabled.includes("files"), el => el.child(panelButton("files", "Files", "mods/files/file.svg")))
       .when(enabled.includes("changes"), el => el.child(panelButton("changes", "Changes", "mods/changes/changes.svg")))
       .children(extraPanels.map(({ id, label, icon, iconType }) => panelButton(id, label, icon, iconType)))
-      .when(enabled.includes("task-evidence"), el => el.child(panelButton("task-evidence", "Task & Evidence", "mods/files/file.svg")))
       .when(w?.buttons, el => el.child(button("minimize", w.platform === "windows" ? svg("mods/tabs/win-min.svg").size(16) : "−", () => run("window.minimize")))
         .child(button("maximize", w.platform === "windows" ? svg(`mods/tabs/${w.maximized ? "win-restore" : "win-max"}.svg`).size(16) : "□", () => run("window.maximize")))
         .child(button("close-window", w.platform === "windows" ? svg("mods/tabs/win-close.svg").size(16) : svg("mods/pane/close.svg").size(13), () => run("window.close"))));

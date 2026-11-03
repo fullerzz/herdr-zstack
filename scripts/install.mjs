@@ -4,15 +4,17 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
-const prefix = 'mods/zstack-task-evidence/';
-const tabsPrefix = 'mods/zstack-task-evidence-tabs/';
+const prefix = 'mods/zstack-task-evidence-tabs/';
+// The removed Task & Evidence panel. Earlier installs own files here; accepting
+// the prefix lets update and remove delete them and rollback restore them.
+const retiredPrefix = 'mods/zstack-task-evidence/';
 const hash = data => createHash('sha256').update(data).digest('hex');
 // Separate state per target: rolling back one target never reverts the other.
 const targets = {
   mods: {
     stateName: '.herdr-zstack-install.json',
     lockName: '.herdr-zstack-install.lock',
-    validPath: name => [prefix, tabsPrefix].some(p => name.startsWith(p) && /^[a-zA-Z0-9_-]+\.(js|json)$/.test(name.slice(p.length))),
+    validPath: name => [prefix, retiredPrefix].some(p => name.startsWith(p) && /^[a-zA-Z0-9_-]+\.(js|json)$/.test(name.slice(p.length))),
   },
   templates: {
     stateName: '.herdr-zstack-templates.json',
@@ -80,13 +82,13 @@ function validateOverrides(overrides, target, action) {
   }
 }
 
-export function run({ home, action = 'install', apply = false, target = 'mods', source = path.join(root, 'mods/task-evidence'), tabsSource = path.join(root, 'mods/task-evidence-tabs'), templatesSource = path.join(root, 'templates'), overrides = {} }) {
+export function run({ home, action = 'install', apply = false, target = 'mods', source = path.join(root, 'mods/task-evidence-tabs'), templatesSource = path.join(root, 'templates'), overrides = {} }) {
   if (!home || !path.isAbsolute(home)) throw new Error('--home must be an explicit absolute configuration directory');
   if (!['install', 'update', 'remove', 'rollback'].includes(action)) throw new Error('Expected install, update, remove, or rollback');
   if (!Object.hasOwn(targets, target)) throw new Error('Expected target mods or templates');
   validateOverrides(overrides, target, action);
   safePath(home);
-  const options = { home, action, apply, target: targets[target], sources: target === 'mods' ? { source, tabsSource } : { templatesSource, overrides } };
+  const options = { home, action, apply, target: targets[target], sources: target === 'mods' ? { source } : { templatesSource, overrides } };
   if (!apply) return transact(options);
   fs.mkdirSync(home, { recursive: true });
   const lockPath = safePath(home, targets[target].lockName);
@@ -95,17 +97,15 @@ export function run({ home, action = 'install', apply = false, target = 'mods', 
   finally { fs.closeSync(lock); fs.unlinkSync(lockPath); }
 }
 
-function modFiles({ source, tabsSource }, validPath) {
+function modFiles({ source }, validPath) {
   const wanted = {};
-  for (const [directory, destination] of [[source, prefix], ...(tabsSource ? [[tabsSource, tabsPrefix]] : [])]) {
-    for (const entry of fs.readdirSync(directory, { withFileTypes: true })) {
-      if (!(entry.name.endsWith('.js') || entry.name === 'mod.json')) continue;
-      const name = destination + entry.name;
-      if (!validPath(name) || !entry.isFile() || entry.isSymbolicLink()) throw new Error(`Invalid runtime file: ${entry.name}`);
-      wanted[name] = fs.readFileSync(path.join(directory, entry.name));
-    }
-    if (!wanted[destination + 'main.js'] || !wanted[destination + 'mod.json']) throw new Error('Incomplete mod source');
+  for (const entry of fs.readdirSync(source, { withFileTypes: true })) {
+    if (!(entry.name.endsWith('.js') || entry.name === 'mod.json')) continue;
+    const name = prefix + entry.name;
+    if (!validPath(name) || !entry.isFile() || entry.isSymbolicLink()) throw new Error(`Invalid runtime file: ${entry.name}`);
+    wanted[name] = fs.readFileSync(path.join(source, entry.name));
   }
+  if (!wanted[prefix + 'main.js'] || !wanted[prefix + 'mod.json']) throw new Error('Incomplete mod source');
   return wanted;
 }
 

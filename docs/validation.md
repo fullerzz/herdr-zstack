@@ -1471,3 +1471,27 @@ carry explicit task-space IDs and document intentionally unbound headless work.
 All 163 tests in the mod, scripts, records and workflows suites passed, along
 with the Herdr checker, TypeScript check and diff check. Installed runtime was
 updated; these follow-up paths were verified in the harness, not live UI.
+
+## 2026-11-03 — Task & Evidence panel and board removed
+
+Removed the Task & Evidence mod, its board (`board.json`, `task.mjs board`,
+`updateBoard`, `--space`, `--board`) and the roster layout recipe. The tab bar
+clone keeps Files/Changes, `extraPanels` and per-space memory but no longer
+shows a Task & Evidence button. The pure task-record, decision-log and
+run-index helpers moved to `records/`; panel-only readers were deleted.
+
+The installer now ships only the tab bar. It still accepts ownership entries
+under `mods/zstack-task-evidence/`, so update and remove delete an unmodified
+earlier panel install and rollback restores it.
+
+Validation: `node --test` passed 101 tests, including a new installer test for
+removing a retired panel install and a tab-bar test that a leftover
+`task-evidence` child gets no button. `just check` (TypeScript over
+`records/*.js`, now with `strictNullChecks`), `herdr-app check
+mods/task-evidence-tabs` and `git diff --check` passed. A read-only installer
+preview against the real app home planned seven panel-file removals and two
+tab-bar writes without an ownership error.
+
+Limits: the update was not applied and the running UI was not inspected. The
+personal layouts `personal-task-evidence` and `qa18-sidebar` still contain
+Task & Evidence blocks and were not changed.

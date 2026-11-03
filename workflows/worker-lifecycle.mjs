@@ -1,4 +1,4 @@
-import { sameRevision } from '../mods/task-evidence/task-record.js';
+import { sameRevision } from '../records/task-record.js';
 
 // Decisions only: callers must collect fresh host evidence; this module never sends input.
 export function dispatchDecision({ attempted }) {

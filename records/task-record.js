@@ -1,4 +1,4 @@
-// Pure data helpers: safe to import in the read-only GPUI runtime.
+// Pure task-record helpers with no host imports.
 
 /**
  * @typedef {object} Revision
@@ -7,7 +7,7 @@
  */
 
 /**
- * The worker's saved binding. A panel cannot confirm it against the live core.
+ * The worker's saved binding. A reader cannot confirm it against the live core.
  * @typedef {object} WorkerBinding
  * @property {string} core
  * @property {string} terminal
@@ -57,7 +57,10 @@ const text = value => typeof value === "string" && value.trim().length > 0;
 const object = value => value !== null && typeof value === "object" && !Array.isArray(value);
 /** @param {unknown} value */
 const digest = value => typeof value === "string" && (value === "clean" || /^sha256:[a-f0-9]{64}$/.test(value));
-/** @param {any} value */
+/**
+ * @param {any} value
+ * @returns {value is Revision}
+ */
 const revision = value => object(value) && typeof value.commit === "string" && /^(?:[a-f0-9]{40}|[a-f0-9]{64})$/.test(value.commit) && digest(value.worktreeDigest);
 
 /**
@@ -118,7 +121,7 @@ export function acceptanceStatus(record, observed = null) {
   if (validateRecord(record).length) return "malformed";
   if (!record.receipt) return "unverified";
   if (!sameRevision(record.revision, record.receipt.revision)) return "stale";
-  // A saved receipt is a snapshot; a read-only panel cannot establish current git state.
+  // A saved receipt is a snapshot; without an observed revision it cannot establish current git state.
   if (!observed || observed.machine !== record.machine || observed.checkout !== record.checkout || !revision(observed)) return "unverified";
   if (!sameRevision(record.receipt.revision, observed)) return "stale";
   return record.receipt.decision;

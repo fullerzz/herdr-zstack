@@ -1,6 +1,6 @@
 # Explicit local installation
 
-Run `just install` to install or update this checkout's sidebar mods, hc role
+Run `just install` to install or update this checkout's tab-bar mod, hc role
 templates, and Codex and Claude Code plugins. It requires `node`, `codex`, and
 `claude` on PATH and stops if any step fails. Completed steps remain installed;
 rerun after resolving the failure. Restart host sessions to load updated plugins.
@@ -32,16 +32,18 @@ node scripts/install.mjs rollback --home "$HOME/.config/herdr-app"
 node scripts/install.mjs rollback --home "$HOME/.config/herdr-app" --apply
 ```
 
-Direct runtime `.js` files and `mod.json` from `mods/task-evidence` and
-`mods/task-evidence-tabs` are copied into `mods/zstack-task-evidence` and
-`mods/zstack-task-evidence-tabs`, respectively. Tests, generated typings and editor
+Direct runtime `.js` files and `mod.json` from `mods/task-evidence-tabs` are
+copied into `mods/zstack-task-evidence-tabs`. Tests, generated typings and editor
 files are excluded. Runtime modules must remain direct siblings. Ownership
 hashes and the previous transaction's contents live in
 `.herdr-zstack-install.json` at the app home. Keep that file to retain removal
 and rollback. Reinstall with identical contents does nothing and retains rollback.
-Update also removes obsolete owned runtime files.
+Update also removes obsolete owned runtime files, including an unmodified earlier
+install of the removed Task & Evidence panel in `mods/zstack-task-evidence`.
+Remove any layout block that still names `zstack-task-evidence` yourself; the
+installer never edits layouts.
 
-To update the Task & Evidence sidebar and its toggle from this checkout, run
+To update the tab bar from this checkout, run
 `just update-sidebar`. It applies the update to `HERDR_APP_HOME` when set, or
 `~/.config/herdr-app` otherwise. Run it again after changing or pulling this
 checkout; it does not fetch Git changes or change your layout configuration.
@@ -227,13 +229,12 @@ remains unverified.
 
 ### Presentation and verification
 
-For presentation, follow [the portable recipe](../examples/layout-recipe.md), or the
-[roster recipe](../examples/roster-layout.md) for a run beside its coordinator.
+For presentation, follow [the portable recipe](../examples/layout-recipe.md).
 The mod's `place: none` does not activate a layout.
 
 `node --test` runs dependency-free tests, including disposable app-home installs.
 GitHub Actions runs those tests, whitespace checks and generated-file tracking
 checks from a clean checkout. It does not install hc, herdr-app, or activate a
-personal configuration. Run `herdr-app check mods/task-evidence` separately with
-the installed host, then inspect the live UI after async reads, artifact selection
-and refresh. Neither CI nor the native initial-render checker proves live UI behavior.
+personal configuration. Run `herdr-app check mods/task-evidence-tabs` separately with
+the installed host, then inspect the live UI after panel switching and space
+changes. Neither CI nor the native initial-render checker proves live UI behavior.

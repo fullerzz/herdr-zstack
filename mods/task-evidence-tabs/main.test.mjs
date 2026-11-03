@@ -3,8 +3,8 @@ import assert from 'node:assert/strict';
 import {readFile} from 'node:fs/promises';
 
 const source = await readFile(new URL('./main.js', import.meta.url), 'utf8');
-function setup({panels = ['files', 'changes'], task = true, extraPanels = [], children = []} = {}) {
-  const body = {id:'panel-body', active:'files', children:[{id:'files'}, {id:'changes'}, ...(task ? [{id:'task-evidence'}] : []), ...children]};
+function setup({panels = ['files', 'changes'], extraPanels = [], children = []} = {}) {
+  const body = {id:'panel-body', active:'files', children:[{id:'files'}, {id:'changes'}, ...children]};
   const panel = {id:'panel', hidden:true, children:[body]};
   const root = {children:[panel]};
   const storage = new Map(), calls = [];
@@ -37,37 +37,21 @@ function setup({panels = ['files', 'changes'], task = true, extraPanels = [], ch
   return {instance,body,panel,space,click,find,storage,calls};
 }
 
-test('Task & Evidence shares the native panel: open, close, switch, and reopen', () => {
+test('space changes restore an open panel and closed state independently', () => {
   const p = setup();
-  p.click('task-evidence');
-  assert.equal(p.body.active,'task-evidence'); assert.equal(p.panel.hidden,false);
-  p.click('task-evidence'); assert.equal(p.panel.hidden,true);
-  p.click('files'); assert.equal(p.body.active,'files'); assert.equal(p.panel.hidden,false);
-  p.click('task-evidence'); p.click('changes');
-  assert.equal(p.body.active,'changes'); assert.equal(p.panel.hidden,false);
-  p.click('task-evidence'); assert.equal(p.body.active,'task-evidence');
-});
-
-test('space changes restore Task & Evidence and closed state independently', () => {
-  const p = setup();
-  p.click('task-evidence'); p.instance.render();
+  p.click('changes'); p.instance.render();
   p.space.id='two'; p.instance.render(); assert.equal(p.panel.hidden,true);
   p.instance.render();
   p.space.id='one'; p.instance.render();
-  assert.equal(p.body.active,'task-evidence'); assert.equal(p.panel.hidden,false);
-  p.click('task-evidence'); p.instance.render();
+  assert.equal(p.body.active,'changes'); assert.equal(p.panel.hidden,false);
+  p.click('changes'); p.instance.render();
   p.space.id='two'; p.instance.render();
   p.space.id='one'; p.instance.render(); assert.equal(p.panel.hidden,true);
 });
 
-test('button follows layout availability without changing Files and Changes preferences', () => {
-  const p = setup({panels:[]});
-  const tree = p.instance.render();
-  assert.ok(p.find(tree,'panel-task-evidence'));
-  assert.equal(p.find(tree,'panel-files'),undefined);
-  assert.equal(p.find(tree,'panel-changes'),undefined);
-  const noTask = setup({task:false});
-  assert.equal(noTask.find(noTask.instance.render(),'panel-task-evidence'),undefined);
+test('a leftover task-evidence layout child gets no button', () => {
+  const p = setup({children:[{id:'task-evidence'}]});
+  assert.equal(p.find(p.instance.render(),'panel-task-evidence'),undefined);
 });
 
 test('a configured integration opens, collapses, switches, and restores per space', () => {
@@ -84,7 +68,7 @@ test('a configured integration opens, collapses, switches, and restores per spac
   assert.equal(p.body.active,'threads'); assert.equal(p.panel.hidden,false);
   p.click('threads'); assert.equal(p.panel.hidden,true);
   p.click('files'); assert.equal(p.body.active,'files'); assert.equal(p.panel.hidden,false);
-  p.click('threads'); p.click('task-evidence'); assert.equal(p.body.active,'task-evidence');
+  p.click('threads'); p.click('changes'); assert.equal(p.body.active,'changes');
 });
 
 test('integration buttons require existing children and valid distinct configuration', () => {
@@ -92,7 +76,7 @@ test('integration buttons require existing children and valid distinct configura
     null, {}, {id:'', label:'Empty'}, {id:'threads', label:3},
     {id:'threads', label:'Bad icon', icon:5}, {id:'threads', label:'Bad renderer', iconType:'html'},
     {id:'missing', label:'Missing'}, {id:'files', label:'Override'},
-    {id:'changes', label:'Override'}, {id:'task-evidence', label:'Override'},
+    {id:'changes', label:'Override'},
     {id:'threads', label:'Threads', icon:'art/turtle.svg'}, {id:'threads', label:'Duplicate'},
     {id:'notes', label:'Notes'},
   ]});
@@ -106,7 +90,6 @@ test('integration buttons require existing children and valid distinct configura
   assert.equal(p.find(tree,'panel-missing'),undefined);
   assert.equal(p.find(tree,'panel-files'),undefined);
   assert.equal(p.find(tree,'panel-changes'),undefined);
-  assert.ok(p.find(tree,'panel-task-evidence').items.includes('Task & Evidence'));
   assert.equal(tree.items.filter(item=>item.styles?.id?.[0]==='panel-threads').length,1);
   for (const extraPanels of [null, {}, 'threads']) assert.doesNotThrow(()=>setup({extraPanels}).instance.render());
 });

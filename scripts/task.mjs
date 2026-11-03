@@ -1,17 +1,16 @@
 #!/usr/bin/env node
-// Coordinator-side task tracking for the Task & Evidence board. It writes only
-// the coordinator's own `.herdr-tasks/<task>/` files and its board entry. It
-// never runs hc, binds workers, observes revisions or writes receipts.
+// Coordinator-side task tracking. It writes only the coordinator's own
+// `.herdr-tasks/<task>/` files. It never runs hc, binds workers, observes
+// revisions or writes receipts.
 import { execFile } from 'node:child_process';
 import { mkdir, readFile, realpath } from 'node:fs/promises';
-import { hostname, homedir } from 'node:os';
-import { isAbsolute, join, resolve } from 'node:path';
+import { hostname } from 'node:os';
+import { join, resolve } from 'node:path';
 import { parseArgs, promisify } from 'node:util';
 import { pathToFileURL } from 'node:url';
-import { updateBoard, withFileLock, writeAtomic, writeRecord } from '../records/task-record-store.mjs';
-import { parseRecord } from '../mods/task-evidence/task-record.js';
-import { boardKey, MAX_BOARD } from '../mods/task-evidence/board.js';
-import { DECISION_HEADER, decisionCell } from '../mods/task-evidence/decisions.js';
+import { withFileLock, writeAtomic, writeRecord } from '../records/task-record-store.mjs';
+import { parseRecord } from '../records/task-record.js';
+import { DECISION_HEADER, decisionCell } from '../records/decisions.js';
 
 const USAGE = `Usage:
   task.mjs start --task <id> --scope <text> --goal <text> [--label <text>]
@@ -19,27 +18,16 @@ const USAGE = `Usage:
   task.mjs artifact --task <id> <path>
   task.mjs decide --task <id> --phase <text> --why <text> --evidence <pointers> --result <text> <decision>
   task.mjs finish --task <id> [<outcome>]
-  task.mjs board add (--record <path> | --run <path>) --label <text> [--machine <name>]
-  task.mjs board remove (--record <path> | --run <path>) [--machine <name>]
 
 Common options:
-  --space <id>          explicit Herdr space binding for start or board add
   --checkout <path>     repository root (default: Git root of the current directory)
-  --coordinator <id>    writer identity (default: $HC_TERMINAL_ID)
-  --board <path>        board file (default: $HERDR_ZSTACK_BOARD, else
-                        $XDG_STATE_HOME/herdr-zstack/board.json)`;
+  --coordinator <id>    writer identity (default: $HC_TERMINAL_ID)`;
 
 const options = {
-  space: { type: 'string' }, task: { type: 'string' }, scope: { type: 'string' }, goal: { type: 'string' }, label: { type: 'string' },
-  checkout: { type: 'string' }, coordinator: { type: 'string' }, board: { type: 'string' },
-  record: { type: 'string' }, run: { type: 'string' }, machine: { type: 'string' }, help: { type: 'boolean', short: 'h' },
+  task: { type: 'string' }, scope: { type: 'string' }, goal: { type: 'string' }, label: { type: 'string' },
+  checkout: { type: 'string' }, coordinator: { type: 'string' }, help: { type: 'boolean', short: 'h' },
   phase: { type: 'string' }, why: { type: 'string' }, evidence: { type: 'string' }, result: { type: 'string' },
 };
-
-export function defaultBoard(env = process.env) {
-  if (env.HERDR_ZSTACK_BOARD) return resolve(env.HERDR_ZSTACK_BOARD);
-  return join(env.XDG_STATE_HOME || join(env.HOME || homedir(), '.local', 'state'), 'herdr-zstack', 'board.json');
-}
 
 const segment = value => /^[A-Za-z0-9][A-Za-z0-9._-]*$/.test(value ?? '');
 const line = value => value.replace(/\s+/g, ' ').trim();
@@ -84,38 +72,10 @@ async function readOwnRecord(path) {
   return record;
 }
 
-function boardEntry(values) {
-  const target = values.record ?? values.run;
-  if (!target || (values.record && values.run)) throw new Error('name exactly one of --record or --run');
-  if (!isAbsolute(target)) throw new Error('--record and --run must be absolute paths');
-  return { ...(values.space ? { space: values.space } : {}), label: values.label, ...(values.record ? { record: values.record } : { run: values.run }), machine: values.machine ?? null };
-}
-
-// The newest entry goes first. The board keeps its newest MAX_BOARD entries.
-// `added` marks this addition, so an entry the panel removed shows again.
-export const addEntry = entry => (tasks, sequence) =>
-  [{ ...entry, added: sequence }, ...tasks.filter(task => boardKey(task) !== boardKey(entry))].slice(0, MAX_BOARD);
-
 export async function main(argv, { env = process.env, cwd = process.cwd(), now = () => new Date().toISOString(), out = console.log } = {}) {
   const { values, positionals } = parseArgs({ args: argv, options, allowPositionals: true });
   const [command, ...rest] = positionals;
   if (values.help || !command) { out(USAGE); return; }
-  if (values.space !== undefined && !values.space.trim()) throw new Error('--space must be nonblank');
-  const board = values.board ? resolve(cwd, values.board) : defaultBoard(env);
-
-  if (command === 'board') {
-    const [action] = rest;
-    const entry = boardEntry(values);
-    if (action === 'add') {
-      if (!values.label?.trim()) throw new Error('--label is required');
-      const result = await updateBoard(board, addEntry(entry));
-      out(JSON.stringify({ board, sequence: result.sequence }));
-    } else if (action === 'remove') {
-      const result = await updateBoard(board, tasks => tasks.filter(task => boardKey(task) !== boardKey(entry)));
-      out(JSON.stringify({ board, sequence: result.sequence }));
-    } else throw new Error(`unknown board action: ${action ?? '(none)'}\n${USAGE}`);
-    return;
-  }
 
   if (!segment(values.task)) throw new Error('--task must be one path segment of letters, digits, ".", "_" or "-"');
   const coordinator = values.coordinator ?? env.HC_TERMINAL_ID;
@@ -144,8 +104,7 @@ export async function main(argv, { env = process.env, cwd = process.cwd(), now =
       owner: coordinator, scope: line(values.scope), activity: 'active', worker: null, revision: null,
       brief: relative('brief.md'), handoff: relative('status.md'), artifacts: [], receipt: null,
     }, { writer: coordinator, expectedSequence: 0 });
-    await updateBoard(board, addEntry({ label, record: recordPath, machine: null, ...(values.space ? { space: values.space } : {}) }));
-    out(JSON.stringify({ record: recordPath, status: statusPath, board, label: `hc label ${coordinator} task=${values.task}` }));
+    out(JSON.stringify({ record: recordPath, status: statusPath, label: `hc label ${coordinator} task=${values.task}` }));
     return;
   }
 

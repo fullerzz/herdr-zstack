@@ -3,7 +3,7 @@ import { realpathSync, lstatSync } from 'node:fs';
 import { isDeepStrictEqual } from 'node:util';
 import { withFileLock } from '../records/task-record-store.mjs';
 import { reconcile, recordAcceptance } from './worker-lifecycle.mjs';
-import { validateRunShape, recordPath, runPath, MAX_ROSTER } from '../mods/task-evidence/roster.js';
+import { validateRunShape, recordPath, runPath, MAX_ROSTER } from '../records/roster.js';
 
 export { recordPath, runPath, MAX_ROSTER };
 

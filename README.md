@@ -4,10 +4,9 @@ Herdr-specific workflows and native UI for zstack. This repository owns integrat
 
 ## Available now
 
-- [Task & Evidence](mods/task-evidence/README.md): explicit task or roster selection, read-only brief/artifacts/handoff, per-member receipt snapshots and binding status, refresh on core fact changes, and separate ownership-unverified live activity.
 - [Execution contract](docs/execution-contract.md): native operation matrix, capability preflight, zstack compatibility, and single-worker ownership boundaries. `node scripts/preflight.mjs` reports native-session detection and the capability matrix as read-only JSON.
 - [Task records and revision receipts](docs/task-record.md): shared schema, coordinator writer, local revision observation, and fail-closed acceptance checks.
-- [Installation](docs/installation.md): reproducible namespaced mod installation, personal layout recipe, and CI checks.
+- [Installation](docs/installation.md): reproducible namespaced tab-bar installation, personal layout recipe, and CI checks.
 - [hc workflow companion](skills/hc-workflow/SKILL.md): the hc-native port of zstack's `herdr-workflow`, with [operations](skills/hc-workflow/references/operations.md) for a bounded roster of 1–3 task-owned workers and a coordinator-owned [run index](docs/task-record.md#run-index-for-a-roster). It ships as the `herdr-zstack:hc-workflow` plugin skill; see [installation](docs/installation.md#hc-companion-skills).
 - [Swarm addendum](skills/swarm/SKILL.md): hc fan-out, coverage drain and race cancellation applied alongside zstack's swarm, with per-writer worktrees and one consolidated report.
 - [Playbook table](skills/hc-workflow/references/playbooks.md): one hc delta table for z-mode's delegating, pause, pickup and cleanup playbooks. Each step maps to an hc operation and record fields, or stays direct.
@@ -21,23 +20,20 @@ Installation does not activate z-mode or Herdr execution. Activating z-mode auto
 ## Develop
 
 ```sh
-node --test mods/task-evidence/*.test.mjs
-herdr-app check mods/task-evidence
+node --test
+herdr-app check mods/task-evidence-tabs
 just check
 ```
 
-`just check` regenerates the mod's host declarations with `herdr-app types` and type-checks its JSDoc with TypeScript through `npx`. Herdr supplies `gpui-kit`, `gpui-base`, and `herdr` at runtime; do not install them from npm. Read the generated `~/.config/herdr-app/AGENTS.md` and type definitions for the installed app version. The native checker covers initial rendering only: verify file navigation and refresh in the running app too.
+`just check` type-checks the JSDoc of the pure helpers in `records/` with TypeScript through `npx`. Herdr supplies the tab bar's `gpui-kit`, `gpui-base`, and `herdr` imports at runtime; do not install them from npm. Read the generated `~/.config/herdr-app/AGENTS.md` and type definitions for the installed app version. The native checker covers initial rendering only: verify panel switching in the running app too.
 
 ## Install locally
 
-Follow the [installation guide](docs/installation.md) and [mod configuration guide](mods/task-evidence/README.md). The installer copies the viewer to `zstack-task-evidence` and its tab bar to
-`zstack-task-evidence-tabs`. Follow the [shared sidebar recipe](examples/layout-recipe.md)
-to add a collapsible Task & Evidence button beside Files and Changes in a personal layout clone, or the [roster layout recipe](examples/roster-layout.md) to show a run's members beside the coordinator. Installed files are copies; source edits require an explicit update. No installation happens from running tests.
+Follow the [installation guide](docs/installation.md). The installer copies the tab bar to
+`zstack-task-evidence-tabs`. It supports [additional sidebar buttons](examples/layout-recipe.md)
+through personal layout configuration, so integrations do not require edits to its installed code. Installed files are copies; source edits require an explicit update. No installation happens from running tests.
 
-The tab bar also supports [additional sidebar buttons](examples/layout-recipe.md#additional-sidebar-integrations)
-through personal layout configuration, so integrations do not require edits to its installed code.
-
-For the initial development setup, `personal-task-evidence` is a copy of the existing personal layout; switching back to `personal` restores the previous presentation. Task paths are explicit and the viewer does not infer success from agent status.
+The Task & Evidence panel has been removed. `just update-sidebar` deletes an unmodified earlier install of `zstack-task-evidence`; remove any `task-evidence` or roster block that still names that mod from your personal layouts.
 
 ## Direction
 
