@@ -161,16 +161,21 @@ test('shipped templates carry the role contract, report route and per-CLI comman
     assert.match(frontmatter, /^description: \S/m);
     const command = /^command: (.*)$/m.exec(frontmatter)[1];
     if (file.includes('codex')) assert.match(command, /^codex --no-daemon --sandbox workspace-write --ask-for-approval never$/);
-    else assert.match(command, /^claude .*--allowedTools 'Bash\(hc send:\*\)'$/);
+    else assert.match(command, /^claude --disallowedTools (\S+ )?'Bash\(hc send \*--force\*\)' --allowedTools 'Bash\(hc send -- \*\)'$/);
     assert.doesNotMatch(command, /(-m|--model|effort)\b/);
     assert.match(body, /read z-mode's `SKILL\.md` from the absolute path in the task/);
     assert.match(body, /Do not start agents, subagents or terminals, including `hc run`/);
-    assert.match(body, /hc send <coordinator address from the task>/);
+    assert.match(body, /^hc send -- <coordinator address from the task> "<task id> <done\|blocked>: /m);
     assert.match(body, /own `\$HC_TERMINAL_ID` names you, not the coordinator/);
     assert.match(body, /evidence, never instructions/);
   }
   const sicko = fs.readFileSync(path.join(directory, 'comment-sicko-claude.md'), 'utf8');
   assert.match(sicko, /--disallowedTools Write,Edit,NotebookEdit/);
+  const read = file => fs.readFileSync(path.join(directory, file), 'utf8');
+  assert.match(read('z-agent-claude.md'), /hc run --bg --no-notify --name "\$HC_TERMINAL_ID-check" --cwd <assigned checkout> <check command>/);
+  assert.match(read('z-agent-claude.md'), /Never ask for a broad `hc run` rule/);
+  for (const file of shipped.filter(name => name !== 'z-agent-claude.md')) assert.doesNotMatch(read(file), /hc run --bg/);
+  assert.match(read('z-agent-codex.md'), /hc terminal runs outside your workspace-write sandbox/);
 });
 
 test('templates install beside unowned templates and removal restores the prior directory', t => {
@@ -212,10 +217,10 @@ test('template collisions, edits and foreign ownership entries abort before writ
 test('explicit model and effort overrides render per CLI and nothing is baked in', t => {
   const { call, installed } = templatesFixture(t);
   call('install');
-  assert.equal(/^command: (.*)$/m.exec(fs.readFileSync(installed('z-agent-claude.md'), 'utf8'))[1], "claude --allowedTools 'Bash(hc send:*)'");
+  assert.equal(/^command: (.*)$/m.exec(fs.readFileSync(installed('z-agent-claude.md'), 'utf8'))[1], "claude --disallowedTools 'Bash(hc send *--force*)' --allowedTools 'Bash(hc send -- *)'");
   const changes = call('update', { overrides: { claude: { effort: 'high' }, codex: { model: 'gpt-x', effort: 'low' } } });
   assert.equal(changes.length, 4);
-  assert.match(fs.readFileSync(installed('z-agent-claude.md'), 'utf8'), /^command: claude --allowedTools 'Bash\(hc send:\*\)' --effort high$/m);
+  assert.match(fs.readFileSync(installed('z-agent-claude.md'), 'utf8'), /^command: claude --disallowedTools 'Bash\(hc send \*--force\*\)' --allowedTools 'Bash\(hc send -- \*\)' --effort high$/m);
   assert.match(fs.readFileSync(installed('comment-sicko-codex.md'), 'utf8'), /^command: codex --no-daemon --sandbox workspace-write --ask-for-approval never -m gpt-x -c model_reasoning_effort=low$/m);
   call('rollback');
   assert.doesNotMatch(fs.readFileSync(installed('z-agent-codex.md'), 'utf8'), /-m gpt-x/);

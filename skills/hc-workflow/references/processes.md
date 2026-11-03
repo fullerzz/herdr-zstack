@@ -1,10 +1,32 @@
 # Supporting processes on hc
 
-This file covers long tests, servers and watchers, such as zstack's `watch-pr`, run as task-owned hc terminals. A supporting process is a plain program, not an agent. It has no brief, report or receipt. A brief check that finishes inside one host command stays direct. The selected playbook still decides whether a process is needed, and the user's request still bounds what it may do. Running in the background never adds authority.
+This file covers tests, builds, servers and watchers, such as zstack's `watch-pr`, run as task-owned hc terminals. A supporting process is a plain program, not an agent. It has no brief, report or receipt. The selected playbook still decides whether a process is needed, and the user's request still bounds what it may do. Running in the background never adds authority. hc runs the program outside your host's sandbox and permission check, so run only commands you would run directly anyway.
 
-The [execution contract](../../../docs/execution-contract.md)'s baseline is hc 0.1.15. This procedure was observed live only on hc 0.1.16 on macOS, which is newer than that baseline, as recorded in [validation](../../../docs/validation.md#issue-17-supporting-processes-and-live-restart-recovery--2026-11-01). Re-read `hc --skill` and the help for `run`, `wait`, `get` and `keep` before you rely on this syntax. `<run>`, `<task>`, `<purpose>` and `<t>` are placeholders.
+There are two tiers:
 
-## Launch
+- A **quick background check** is a command that ends on its own: a test suite, build, install, lint or CI watch. Use it for any such command you expect to take over about 30 seconds, or of unknown length. Commands expected to finish sooner stay in your own shell.
+- An **owned process** is a server, a watcher, anything that needs readiness gating, anything that must outlive a wait, or anything a pause or handoff must account for. It uses the launch, notes and persistence policy below.
+
+The [execution contract](../../../docs/execution-contract.md)'s baseline is hc 0.1.15. This procedure was observed live only on hc 0.1.16 on macOS, which is newer than that baseline, as recorded in [validation](../../../docs/validation.md#issue-17-supporting-processes-and-live-restart-recovery--2026-11-01). Re-read `hc --skill` and the help for `run`, `wait`, `get` and `keep` before you rely on this syntax. `<run>`, `<task>`, `<purpose>`, `<name>` and `<t>` are placeholders.
+
+## Quick background check
+
+```sh
+hc run --bg --no-notify --name "$HC_TERMINAL_ID-<purpose>" --cwd <checkout> <command>
+hc wait <name> --timeout 90 --json    # reason: exit, exit_code, signal
+hc read <name> --lines 100            # output, before removal
+hc rm <name>
+```
+
+- Names are unique among all live terminals in the core, so the `$HC_TERMINAL_ID-` prefix keeps yours from colliding with another agent's. If the launch fails, for example with `name_taken`, fix it first; never wait on, read or remove a name you did not start.
+- Keep `--timeout` below your shell tool's own command limit. Claude Code's Bash tool stops waiting after 120 seconds by default and moves the command to a background task. A bare `hc wait` uses hc's default of 180 seconds.
+- Keep working while it runs. Start several at once and collect each with `hc wait --children any --timeout 90`, or wait on each name.
+- Its evidence is the command, cwd, `exit_code` and the output you read. Only `exit_code: 0` from a real exit passes: `hc wait` reports it as `reason: exit`, and `hc get` as `reason: exited`. See [exit codes and evidence](#exit-codes-and-evidence). Put that evidence in your report. A quick check needs no run index, member record, labels or notes entry.
+- `reason: timeout` is a check-in. Wait again on the same name. Never launch a duplicate.
+- Never add `--rm` to a background check. It removes a terminal that exits while no wait is running for it, and a later `hc wait` then returns `not_found` with no exit code. Remove it yourself with `hc rm` after you collect the result.
+- If it outlives your current step, or a pause comes before it ends, promote it: record it in the notes as an owned process.
+
+## Launch an owned process
 
 ```sh
 hc run --bg --json --name <run>-<purpose> --cwd <checkout> \

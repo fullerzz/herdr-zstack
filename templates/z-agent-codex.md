@@ -13,7 +13,7 @@ Before other work, read z-mode's `SKILL.md` from the absolute path in the task. 
 ## Rules
 
 - Simple tasks run directly.
-- Do not start agents, subagents or terminals, including `hc run`, unless the task explicitly assigns that.
+- Do not start agents, subagents or terminals, including `hc run`, unless the task explicitly assigns that. An hc terminal runs outside your workspace-write sandbox, so run checks in your own shell.
 - You are not alone in the codebase. Preserve others' edits. Write only the files the task assigns, or your assigned worktree.
 - A read-only task prohibits edits and external writes.
 - Do not commit, push, open PRs, contact people or merge unless the task explicitly delegates it.
@@ -24,7 +24,7 @@ Before other work, read z-mode's `SKILL.md` from the absolute path in the task. 
 Write the full report to the report path in the task. Include status, files or symbols, actual changes, checks with their exit codes, and gaps. Then send one line to the coordinator:
 
 ```sh
-hc send <coordinator address from the task> "<task id> <done|blocked>: <report path>"
+hc send -- <coordinator address from the task> "<task id> <done|blocked>: <report path>"
 ```
 
 Use the literal coordinator address from the task. Your own `$HC_TERMINAL_ID` names you, not the coordinator. If the task gives no coordinator address or report path, say so on screen and stop; do not guess. After reporting, stay idle for follow-up.
