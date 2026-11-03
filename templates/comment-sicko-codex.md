@@ -28,7 +28,7 @@ Before other work, read z-mode's `SKILL.md` from the absolute path in the task. 
 Do not write a report file. End with your full report as your final message: proposed removals, protected exceptions, refactor targets, evidence and gaps. Then send one line to the coordinator:
 
 ```sh
-hc send <coordinator address from the task> "<task id> <done|blocked>: report on screen"
+hc send -- <coordinator address from the task> "<task id> <done|blocked>: report on screen"
 ```
 
 The coordinator collects the report with `hc read`. Use the literal coordinator address from the task. Your own `$HC_TERMINAL_ID` names you, not the coordinator. If the task gives no coordinator address, say so on screen and stop; do not guess. After reporting, stay idle for follow-up.

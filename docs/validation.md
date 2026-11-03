@@ -1495,3 +1495,88 @@ tab-bar writes without an ownership error.
 Limits: the update was not applied and the running UI was not inspected. The
 personal layouts `personal-task-evidence` and `qa18-sidebar` still contain
 Task & Evidence blocks and were not changed.
+
+## 2026-11-03 — hc-first defaults and template send guard
+
+Agents in verified hc terminals now get pointed to hc for slow work.
+`hc-workflow` has a "Default to hc" table that maps host background shells,
+sleep loops, monitor tools, CI watches and native agents to hc commands.
+`processes.md` splits supporting processes into a quick background check
+(launch, wait, read, remove; no run index, record or notes) and the existing
+owned process. The new model-invocable `hc-first` skill applies the same
+slow-command rule outside z-mode. It is gated on `HC_TERMINAL_ID` and a
+supported read-only preflight, yields to an explicit Native choice, and grants
+no delegation authority. The upstream hook and `native-hosts.md` wording is
+filed as fullerzz/agent-skills#79.
+
+Templates: the Claude z-agent may run the check commands its task names in its
+own hc terminal. Codex templates keep the `hc run` ban, because an hc
+terminal runs outside Codex's workspace-write sandbox. Both Claude templates
+now allow only `Bash(hc send -- *)` and deny `Bash(hc send *--force*)`; see
+the interrogation fixes below for why the first version of this guard failed.
+
+Validation: `node --test` passed 101 tests, with the template test updated for
+the deny rule and the new body text. `just check` and `herdr-app check
+mods/task-evidence-tabs` passed as quick background checks run through hc
+(`hc wait` returned `exit_code: 0`, `reason: exit`; `hc get` showed
+`reason: exited`, which the new text now distinguishes). `claude plugin
+validate .` and `git diff --check` passed.
+
+Limits: no template was reinstalled and no worker was launched, so the deny
+rule's runtime refusal and hc's parsing of the quoted glob in the template
+command are unproven live. Whether agents actually load `hc-first`
+unprompted, and use hc more often, has not been measured.
+
+### Interrogation fixes
+
+An interrogation (two Claude Opus 5.5 adversaries, one Codex GPT-6.1-Sol seat,
+each in its own worktree) reproduced five defects in the first version of this
+change. The coordinator reran each one in a fresh worktree before fixing it:
+
+1. Quoting hid `--force` from the deny rule. `-""-force`, `'--forc''e'` and
+   `--f\orce` contain no literal `--force`, so `Bash(hc send:*)` allowed them,
+   and the shell passed hc a real `--force`. Fix: the Claude templates allow
+   only `Bash(hc send -- *)`, and every report command uses `hc send --`.
+   After `--`, hc parses `--force` as text: `hc send -- --force hi` returned
+   `not_found` for a terminal named `--force`, and a trailing `--force`
+   returned `usage`.
+2. The fixed name `ci` collided across agents: the second launch got
+   `name_taken`, and `hc wait ci` returned the other owner's `exit_code: 9`.
+   Fix: every documented name starts with `$HC_TERMINAL_ID-`, and a failed
+   launch must be fixed before any wait, read or remove.
+3. `hc wait --timeout 180` outlived Claude Code's 120-second Bash limit, which
+   moved the wait into a host background task. Fix: documented waits use
+   `--timeout 90` or less (operations, seats, processes, hc-first, z-agent).
+   The text says a bare `hc wait` defaults to 180 seconds.
+4. hc-first's server recipe missed ready text printed before the wait. Fix: it
+   now says to run `hc read` after a `reason: timeout`, as `processes.md` does.
+5. "Two directories above this file's real path" resolved to `skills/` under
+   a literal reading. Fix: hc-first and hc-workflow name the root as the
+   directory holding `skills/`.
+
+A sixth item was dropped as unproven: hc-first's gate passes under a Codex host
+(`host: codex, session: supported`), but no Codex worker was observed loading
+it. hc-first now stops for any coordinator-started worker unless its task or
+template allows hc terminals. `scripts/skill-text.test.mjs` fails on the
+timeout, fixed-name and ambiguous-root patterns in shipped skills and
+templates, and on any Claude template whose send rule is not the `--` form.
+
+Validation: `claude -p --setting-sources "" --strict-mcp-config --model haiku
+--tools Bash --permission-mode dontAsk` with the new template rules, run as an
+hc quick check (`t16-rules`, `exit_code: 0`):
+- `hc send -- int-nonexistent hi` ran (exit 3, `not_found`).
+- `hc send --force …`, `hc send -""-force …` and
+  `hc send int-nonexistent hi '--forc''e'` were denied.
+- `hc send -- int-nonexistent hi '--forc''e'` ran and hc returned
+  `usage: unexpected argument '--force'`.
+- `hc send -- int-nonexistent -""-force` ran with `--force` as the text.
+
+`node --test` passed 104 tests. `just check` and `herdr-app check
+mods/task-evidence-tabs` passed as hc quick checks. `claude plugin validate .`
+and `git diff --check` passed.
+
+Limits: the probes used `dontAsk` with only the template rules. Under a user's
+own permission mode, an `hc send` form the rule does not allow goes to that
+mode's normal flow: a prompt, or an auto-mode classifier. Templates were not
+reinstalled, and no live worker was launched with them. Codex loading
+hc-first remains unobserved.

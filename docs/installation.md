@@ -79,10 +79,15 @@ has stopped; review any temporary state before moving it aside.
 
 | Template | Command |
 |---|---|
-| `z-agent-claude` | `claude --allowedTools 'Bash(hc send:*)'` |
+| `z-agent-claude` | `claude --disallowedTools 'Bash(hc send *--force*)' --allowedTools 'Bash(hc send -- *)'` |
 | `z-agent-codex` | `codex --no-daemon --sandbox workspace-write --ask-for-approval never` |
-| `comment-sicko-claude` | `claude --disallowedTools Write,Edit,NotebookEdit --allowedTools 'Bash(hc send:*)'` |
+| `comment-sicko-claude` | `claude --disallowedTools Write,Edit,NotebookEdit 'Bash(hc send *--force*)' --allowedTools 'Bash(hc send -- *)'` |
 | `comment-sicko-codex` | `codex --no-daemon --sandbox workspace-write --ask-for-approval never` |
+
+The Claude allow rule covers only `hc send -- …`. After `--`, hc parses every
+argument as text, so no quoting of `--force` can turn it into a flag. Any other
+`hc send` form goes through the normal permission flow. The deny rule refuses
+the literal `--force` spelling even when the user's permission mode would allow it.
 
 Each body carries the role, the instruction to read z-mode's `SKILL.md` first,
 the no-delegation rule and the report route. The task given to `hc run` must supply
@@ -125,8 +130,11 @@ the install.
 The repository root is also a `herdr-zstack` plugin. Its manifests are
 `.claude-plugin/plugin.json` and `.codex-plugin/plugin.json`. It ships
 `herdr-zstack:hc-workflow`, `herdr-zstack:single-worker`, and
-`herdr-zstack:swarm`. They are explicit-only; none installs a hook or activates
-a mode. zstack resolves the companion when z-mode is activated or restored for automatic
+`herdr-zstack:swarm`, which are explicit-only, and `herdr-zstack:hc-first`,
+which agents may load on their own. `hc-first` applies only inside a live hc
+terminal that passes the read-only preflight. It routes slow commands, CI
+watches and servers through hc and grants no delegation authority. None of
+the four installs a hook or activates a mode. zstack resolves the companion when z-mode is activated or restored for automatic
 preflight and native-session detection, or when the user explicitly selects Herdr.
 A verified live hc terminal qualifies for automatic selection even without the app. A missing or ambiguous install is a capability gap.
 
