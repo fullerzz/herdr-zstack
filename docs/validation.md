@@ -1580,3 +1580,10 @@ own permission mode, an `hc send` form the rule does not allow goes to that
 mode's normal flow: a prompt, or an auto-mode classifier. Templates were not
 reinstalled, and no live worker was launched with them. Codex loading
 hc-first remains unobserved.
+
+PR #41 review follow-up: pullfrog flagged that the quick-check text allowed
+`--rm`. On hc 0.1.17, `hc run --bg --rm --no-notify --name t16-rmtest sh -c 'exit 7'`
+followed by a wait on another terminal, then `hc wait t16-rmtest`, returned
+`not_found` with exit 3, and the exit code was lost. `processes.md` now forbids `--rm` on background
+checks, and `skill-text.test.mjs` rejects background `--rm` recipes.
+`node --test` passed 104 tests.

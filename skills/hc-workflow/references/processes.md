@@ -23,7 +23,7 @@ hc rm <name>
 - Keep working while it runs. Start several at once and collect each with `hc wait --children any --timeout 90`, or wait on each name.
 - Its evidence is the command, cwd, `exit_code` and the output you read. Only `exit_code: 0` from a real exit passes: `hc wait` reports it as `reason: exit`, and `hc get` as `reason: exited`. See [exit codes and evidence](#exit-codes-and-evidence). Put that evidence in your report. A quick check needs no run index, member record, labels or notes entry.
 - `reason: timeout` is a check-in. Wait again on the same name. Never launch a duplicate.
-- Add `--rm` only when the exit code is all you need. It removes the terminal once the exit code reaches you, so `hc read` can no longer fetch the output.
+- Never add `--rm` to a background check. It removes a terminal that exits while no wait is running for it, and a later `hc wait` then returns `not_found` with no exit code. Remove it yourself with `hc rm` after you collect the result.
 - If it outlives your current step, or a pause comes before it ends, promote it: record it in the notes as an owned process.
 
 ## Launch an owned process

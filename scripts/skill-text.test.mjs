@@ -17,6 +17,8 @@ test('shipped instructions avoid reproduced hc pitfalls', () => {
     assert.doesNotMatch(text, /--timeout 1[2-9]\d\b|--timeout [2-9]\d\d\b/, `${file}: wait timeout at or over the host limit`);
     // Terminal names are unique across the core; a fixed name collides between agents.
     assert.doesNotMatch(text, /--name ci\b|hc wait ci\b/, `${file}: fixed terminal name`);
+    // A --rm terminal that exits before anyone waits is removed with its exit code.
+    assert.doesNotMatch(text, /hc run [^\n`]*--bg[^\n`]*--rm|hc run [^\n`]*--rm[^\n`]*--bg|Add `--rm`/, `${file}: background --rm loses results`);
     // Read literally, "two directories above" a SKILL.md lands in skills/, not the plugin root.
     assert.doesNotMatch(text, /two directories above/, `${file}: ambiguous root path`);
   }
