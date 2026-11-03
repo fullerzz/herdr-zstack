@@ -99,7 +99,7 @@ export default class TaskEvidence extends View {
       for (const key of this.cleared) if (!keys.has(key)) this.cleared.delete(key);
     }
     // A rolling run reuses its path for new work; a dismissal is not permanent.
-    for (const task of listed.filter(task => this.cleared.has(boardKey(task)))) {
+    for (const task of listed.filter(task => this.cleared.has(boardKey(task)) && (!this.config.board || task.space === this.focusSpace))) {
       const completed = await completedTask(readTextFile, task);
       if (this.closed || request !== this.boardRequest) return;
       if (!completed) this.cleared.delete(boardKey(task));

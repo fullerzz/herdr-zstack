@@ -73,8 +73,8 @@ export function taskSpace(props, spaces) {
  * @returns {TaskChoice[]}
  */
 export function taskChoices(config) {
-  const shorthand = config.record ? [{ label: config.title || "Task", record: config.record, machine: config.machine }] :
-    config.run ? [{ label: config.title || "Roster", run: config.run, machine: config.machine }] : [];
+  const shorthand = config.record ? [{ label: config.title || "Task", record: config.record, machine: config.machine, ...(config.space !== undefined ? { space: config.space } : {}) }] :
+    config.run ? [{ label: config.title || "Roster", run: config.run, machine: config.machine, ...(config.space !== undefined ? { space: config.space } : {}) }] : [];
   /** @param {unknown} value */
   const absolute = value => typeof value === "string" && value.startsWith("/");
   // The same rule as a board entry: absent, null (this computer) or a name.

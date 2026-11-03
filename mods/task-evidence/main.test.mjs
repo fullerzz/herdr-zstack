@@ -885,3 +885,46 @@ test('no focused space hides configured tasks before a pending board read comple
     assert.deepEqual(reads, [boardPath], 'no task or evidence reads without a matching space');
   } finally { p.instance.close(); p.cleanup(); }
 });
+
+test('board-backed record and run shorthand preserve explicit binding across focus changes', async () => {
+  for (const field of ['record', 'run']) {
+    const p = await panel(async () => null, {board: boardPath, [field]: '/task.json', space: 'test-space'});
+    try {
+      assert.equal(p.instance.tasks.length, 1);
+      p.callbacks.length = 0;
+      p.host.focus = {space: 'other'};
+      p.instance.render(p.cx);
+      await p.callbacks.shift()(p.cx);
+      assert.deepEqual(p.instance.tasks, []);
+      p.host.focus = {space: 'test-space'};
+      p.instance.render(p.cx);
+      await p.callbacks.shift()(p.cx);
+      assert.equal(p.instance.tasks[0][field], '/task.json');
+    } finally { p.instance.close(); p.cleanup(); }
+  }
+});
+
+test('switching spaces does not await off-space dismissal reads', async () => {
+  const tasks = [
+    {label: 'A', record: boardRecord('a'), space: 'test-space', board: true},
+    {label: 'B', record: boardRecord('b'), space: 'other', board: true},
+  ];
+  const p = await panel(async () => null, {board: boardPath});
+  try {
+    p.callbacks.length = 0;
+    p.instance.boardTasks = tasks;
+    const key = JSON.stringify([boardRecord('a'), null, null]);
+    p.instance.cleared.add(key);
+    const reads = [];
+    p.host.read = async path => { reads.push(path); return path === boardRecord('a') ? new Promise(() => {}) : null; };
+    p.host.focus = {space: 'other'};
+    p.instance.render(p.cx);
+    p.callbacks.shift()(p.cx);
+    await flush();
+    assert.deepEqual(p.instance.tasks.map(t => t.label), ['B']);
+    assert.ok(p.instance.cleared.has(key), 'off-space dismissal is preserved');
+    while (p.callbacks.length) { p.callbacks.shift()(p.cx); await flush(); }
+    assert.ok(reads.includes(boardRecord('b')));
+    assert.ok(!reads.includes(boardRecord('a')));
+  } finally { p.instance.close(); p.cleanup(); }
+});

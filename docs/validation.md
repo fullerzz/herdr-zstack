@@ -1462,3 +1462,12 @@ task exercise; existing personal board entries were not modified.
 Follow-up: no-focus initialization now requires a nonempty focused space before
 matching configured tasks. The regression failed before the fix and passes
 afterward; it checks that a pending board read schedules no task/evidence reads.
+
+PR #39 review follow-up: record/run shorthand now preserves explicit space IDs;
+dismissal rechecks are limited to the focused space, preserving other-space
+entries for their next visit. Both new panel regressions failed before the fixes
+and pass afterward. Coordinator instructions, README and board examples now
+carry explicit task-space IDs and document intentionally unbound headless work.
+All 163 tests in the mod, scripts, records and workflows suites passed, along
+with the Herdr checker, TypeScript check and diff check. Installed runtime was
+updated; these follow-up paths were verified in the harness, not live UI.
