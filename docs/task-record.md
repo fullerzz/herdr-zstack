@@ -38,12 +38,12 @@ The board is one user-level file, normally `~/.local/state/herdr-zstack/board.js
 
 ```json
 { "schemaVersion": 1, "sequence": 4, "tasks": [
-  { "label": "fix-1 · herdr-zstack", "record": "/work/herdr-zstack/.herdr-tasks/fix-1/task.json", "machine": null },
-  { "label": "roster-pilot", "run": "/work/pilot/.herdr-tasks/roster-pilot/run.json", "machine": null }
+  { "label": "fix-1 · herdr-zstack", "record": "/work/herdr-zstack/.herdr-tasks/fix-1/task.json", "machine": null, "space": "task-space-id" },
+  { "label": "roster-pilot", "run": "/work/pilot/.herdr-tasks/roster-pilot/run.json", "machine": null, "space": "task-space-id" }
 ] }
 ```
 
-Each entry has a `label` and exactly one absolute `record` or `run`. `machine` routes the entry's reads, and null means this computer. `added`, which the CLI sets, is the board `sequence` that added the entry; a removal names it, so the same record or run added again is a new entry. The board holds at most 50 entries, and no two can share the same target kind (`record` or `run`), path and machine. `validateBoard` and `readBoard` in `mods/task-evidence/board.js` have no host imports. The board says where to read. It never states activity, ownership or acceptance.
+Each entry has a `label` and exactly one absolute `record` or `run`. Optional `space` is a nonblank, exact Herdr space ID (including any machine prefix); only entries bound to the selected space appear in a board-backed panel. Pass `--space <id>` to `start` or `board add` for sidebar visibility. Omitting it intentionally supports headless tracking, hidden until explicitly rebound. Establish the ID from the assigned task space, never current focus. `machine` routes the entry's reads, and null means this computer. `added`, which the CLI sets, is the board `sequence` that added the entry; a removal names it, so the same record or run added again is a new entry. The board holds at most 50 entries, and no two can share the same target kind (`record` or `run`), path and machine. `validateBoard` and `readBoard` in `mods/task-evidence/board.js` have no host imports. The board says where to read. It never states activity, ownership or acceptance.
 
 `updateBoard(path, change)` in `records/task-record-store.mjs` creates the parent folder. It holds the board's `.lock`, rereads and validates the current board, and applies `change(tasks)`. Then it writes the next sequence atomically. A busy lock is retried for about a second and never stolen. A malformed board is refused, not repaired. Task & Evidence never writes the board. When the user confirms an entry's ✕, the panel records it in `board.removed.json` beside the board, and its `readBoard` hides listed entries. Only Herdr writes that file, with the host's conditional `writeTextFile`; removals of entries no longer on the board are dropped on the next write.
 

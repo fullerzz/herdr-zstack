@@ -13,6 +13,7 @@ export const MAX_BOARD = 50;
  * @property {string} [record] Exactly one of `record` and `run`, absolute.
  * @property {string} [run]
  * @property {string | null} [machine] The machine that owns the entry's files; null is this computer.
+ * @property {string} [space] Exact Herdr space ID including machine prefix.
  * @property {number} [added] The board sequence that added the entry, so a re-added entry is new.
  */
 
@@ -49,6 +50,7 @@ export function validateBoard(board) {
     if (absolute(task.record) === absolute(task.run) || [task.record, task.run].some(v => v !== undefined && !absolute(v)))
       errors.push(`task ${index}: name exactly one absolute record or run`);
     if (task.machine !== undefined && task.machine !== null && !text(task.machine)) errors.push(`task ${index}: machine must be null or a name`);
+    if (task.space !== undefined && !text(task.space)) errors.push("space must be a nonblank ID");
     if (task.added !== undefined && !(Number.isSafeInteger(task.added) && task.added > 0)) errors.push(`task ${index}: added must be a positive sequence`);
     const key = boardKey(task);
     if (seen.has(key)) errors.push(`task ${index}: duplicate entry`);
@@ -95,7 +97,7 @@ export async function readBoard(read, path) {
   const { board, errors } = parseBoard(source);
   if (!board) return { tasks: null, state: `Malformed board: ${errors.join("; ")}` };
   const listed = board.tasks.map(task => ({ label: task.label, ...(task.record ? { record: task.record } : { run: task.run }),
-    machine: task.machine ?? null, added: task.added ?? null, board: true }));
+    machine: task.machine ?? null, ...(task.space ? { space: task.space } : {}), added: task.added ?? null, board: true }));
   let removals;
   try { removals = parseRemovals(await read(removedPath(path), { on: null })); }
   catch (error) { removals = { removed: null, errors: [String(error)] }; }

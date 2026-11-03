@@ -282,3 +282,13 @@ test('first-use registration failure cannot append a decision', async t => {
   assert.equal(await readFile(join(folder, 'task.json.lock'), 'utf8'), 'acceptance owner');
   await assert.rejects(readFile(join(folder, 'decisions.tsv')), { code: 'ENOENT' });
 });
+
+test('start and re-registration carry explicit space bindings', async t => {
+  const f = await fixture(t);
+  await f.cli(['start', '--task', 'bound', '--scope', 's', '--goal', 'g', '--space', 'local-space']);
+  const entry = (await f.json(f.board)).tasks[0];
+  assert.equal(entry.space, 'local-space');
+  await f.cli(['board', 'add', '--record', entry.record, '--label', entry.label, '--space', 'remote/space']);
+  assert.equal((await f.json(f.board)).tasks[0].space, 'remote/space');
+  await assert.rejects(f.cli(['board', 'add', '--record', entry.record, '--label', entry.label, '--space', ' ']), /nonblank/);
+});

@@ -51,12 +51,14 @@ for `--outlive-parent` and `--keep`, and core-restart recovery.
 
 While z-mode is active and Herdr is selected, track every task beyond a one-reply answer on the Task & Evidence board. This applies to direct work and delegated work alike. The user's selection of both modes authorizes these writes and nothing else: the coordinator's own `.herdr-tasks/<task>/` files and its board entry. Resolve `TASK_CLI` to `scripts/task.mjs` two directories above this file's real path. Run it from the task's checkout, which defaults `--checkout` to the Git root.
 
-1. When you restate the goal, run `node "$TASK_CLI" start --task <id> --scope "<scope>" --goal "<restated goal>"`. Then run the `hc label` command it prints, so the panel lists your terminal's live status.
+Establish the task space explicitly before registration: use the space ID supplied by the user or verify the task's assigned space in `herdr-app ls` using its known terminal/tab identity. Do not use whichever space is focused or guess from a checkout. Preserve the exact ID, including a remote machine prefix, as `TASK_SPACE` for the task and its roster. If no binding is established (including headless work), omit `--space` intentionally and report that tracking is durable but hidden from the sidebar; re-register with `board add --space <id>` once the association is known.
+
+1. When you restate the goal, run `node "$TASK_CLI" start --task <id> --scope "<scope>" --goal "<restated goal>" --space "$TASK_SPACE"`. Then run the `hc label` command it prints, so the panel lists your terminal's live status.
 2. At each phase change, run `node "$TASK_CLI" note --task <id> "<one-line status>"`. Use the same one-line status you give the user. Write the next safe action before a pause or a wait for the user.
 3. Name each evidence file as you produce it: `node "$TASK_CLI" artifact --task <id> <path>`.
 4. At each decision point, such as a chosen fork, a verified unit, a pivot or revert, or a blocker, log one row: `node "$TASK_CLI" decide --task <id> --phase <phase> --why "<reason>" --evidence "<pointers>" --result "<outcome>" "<decision>"`. Follow zstack's show-me-your-work guidance for what earns a row and how to word it. Name evidence by the exact path you gave `artifact`, so the panel can link it. Log no routine actions.
 5. When the task ends, run `node "$TASK_CLI" finish --task <id> "<outcome>"`. A finished task is reported activity only. Do not write a receipt for your own work.
-6. For a roster, also add the run index after `writeRun`: `node "$TASK_CLI" board add --run "<absolute path to .herdr-tasks/<run>/run.json>" --label "<run>"`.
+6. For a roster, also add the run index after `writeRun`: `node "$TASK_CLI" board add --run "<absolute path to .herdr-tasks/<run>/run.json>" --label "<run>" --space "$TASK_SPACE"`.
 
 The CLI refuses writers other than the recorded coordinator, which is `$HC_TERMINAL_ID` by default. A new session starts a new task ID and names the earlier task in its brief. Workers never run these commands. A failed tracking write is reported once and does not block the task. The panel finds the board only when the layout's Task & Evidence block sets a `board` prop; see the [mod README](../../mods/task-evidence/README.md#tracked-tasks).
 

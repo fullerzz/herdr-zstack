@@ -23,13 +23,14 @@ const USAGE = `Usage:
   task.mjs board remove (--record <path> | --run <path>) [--machine <name>]
 
 Common options:
+  --space <id>          explicit Herdr space binding for start or board add
   --checkout <path>     repository root (default: Git root of the current directory)
   --coordinator <id>    writer identity (default: $HC_TERMINAL_ID)
   --board <path>        board file (default: $HERDR_ZSTACK_BOARD, else
                         $XDG_STATE_HOME/herdr-zstack/board.json)`;
 
 const options = {
-  task: { type: 'string' }, scope: { type: 'string' }, goal: { type: 'string' }, label: { type: 'string' },
+  space: { type: 'string' }, task: { type: 'string' }, scope: { type: 'string' }, goal: { type: 'string' }, label: { type: 'string' },
   checkout: { type: 'string' }, coordinator: { type: 'string' }, board: { type: 'string' },
   record: { type: 'string' }, run: { type: 'string' }, machine: { type: 'string' }, help: { type: 'boolean', short: 'h' },
   phase: { type: 'string' }, why: { type: 'string' }, evidence: { type: 'string' }, result: { type: 'string' },
@@ -87,7 +88,7 @@ function boardEntry(values) {
   const target = values.record ?? values.run;
   if (!target || (values.record && values.run)) throw new Error('name exactly one of --record or --run');
   if (!isAbsolute(target)) throw new Error('--record and --run must be absolute paths');
-  return { label: values.label, ...(values.record ? { record: values.record } : { run: values.run }), machine: values.machine ?? null };
+  return { ...(values.space ? { space: values.space } : {}), label: values.label, ...(values.record ? { record: values.record } : { run: values.run }), machine: values.machine ?? null };
 }
 
 // The newest entry goes first. The board keeps its newest MAX_BOARD entries.
@@ -99,6 +100,7 @@ export async function main(argv, { env = process.env, cwd = process.cwd(), now =
   const { values, positionals } = parseArgs({ args: argv, options, allowPositionals: true });
   const [command, ...rest] = positionals;
   if (values.help || !command) { out(USAGE); return; }
+  if (values.space !== undefined && !values.space.trim()) throw new Error('--space must be nonblank');
   const board = values.board ? resolve(cwd, values.board) : defaultBoard(env);
 
   if (command === 'board') {
@@ -142,7 +144,7 @@ export async function main(argv, { env = process.env, cwd = process.cwd(), now =
       owner: coordinator, scope: line(values.scope), activity: 'active', worker: null, revision: null,
       brief: relative('brief.md'), handoff: relative('status.md'), artifacts: [], receipt: null,
     }, { writer: coordinator, expectedSequence: 0 });
-    await updateBoard(board, addEntry({ label, record: recordPath, machine: null }));
+    await updateBoard(board, addEntry({ label, record: recordPath, machine: null, ...(values.space ? { space: values.space } : {}) }));
     out(JSON.stringify({ record: recordPath, status: statusPath, board, label: `hc label ${coordinator} task=${values.task}` }));
     return;
   }

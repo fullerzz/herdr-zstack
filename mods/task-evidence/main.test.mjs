@@ -7,13 +7,13 @@ const main = await readFile(new URL("./main.js", import.meta.url), "utf8");
 // Host modules become one stub; sibling modules load from disk, as the installer ships them.
 const hostImport = /^import (.*) from "(gpui-kit|gpui-base|herdr)";$/gm;
 const siblingImport = /from "\.\/([\w-]+\.js)";/g;
-async function panel(read, props = {}) {
+async function panel(read, props = {}, focus = {space: "test-space"}) {
   const callbacks = [];
   const key = `taskEvidenceTest${Math.random()}`;
-  globalThis[key] = { read, spaces: [], terminals: [], watch: () => new Promise(() => {}), props: { notes: "/notes.md", artifacts: [{ path: "/checks.log" }], ...props } };
+  globalThis[key] = { read, focus, spaces: [], terminals: [], watch: () => new Promise(() => {}), props: { notes: "/notes.md", artifacts: [{ path: "/checks.log" }], ...props } };
   const host = `const h = globalThis[${JSON.stringify(key)}];
     export const View = class {}; export const readTextFile = (...args) => h.read(...args); export const spaces = () => h.spaces; export const props = () => h.props;
-    export const theme = () => ({}); export const agents = () => []; export const terminals = () => h.terminals; export const run = () => null;
+    export const focused = () => h.focus; export const theme = () => ({}); export const agents = () => []; export const terminals = () => h.terminals; export const run = () => null;
     export const watchFolder = path => h.watch(path); export const writeTextFile = (...args) => h.write(...args);
     export const div = () => { const node = {items: [], styles: {}}; let builder;
       builder = new Proxy(node, {get(target, name) {
@@ -298,7 +298,7 @@ test('facts changing during a reread trigger another; manual refresh clears firs
 
 test('panel host surface reads, navigates and writes only through removeEntry', () => {
   const imported = [...main.matchAll(/^import \{([^}]*)\} from "herdr";$/gm)].flatMap(m => m[1].split(',').map(name => name.trim()));
-  assert.deepEqual(imported.sort(), ['agents', 'props', 'readTextFile', 'run', 'spaces', 'terminals', 'theme', 'watchFolder', 'writeTextFile']);
+  assert.deepEqual(imported.sort(), ['agents', 'focused', 'props', 'readTextFile', 'run', 'spaces', 'terminals', 'theme', 'watchFolder', 'writeTextFile']);
   assert.deepEqual([...main.matchAll(/writeTextFile[^\n]*/g)].map(m => m[0]).slice(1),
     ['writeTextFile, this.config.board, task);'], 'the write goes only through removeEntry, which writes the removal list');
   assert.deepEqual([...main.matchAll(/run\("([^"]+)"/g)].map(m => m[1]), ['agent.focus'], 'navigation is the only command');
@@ -306,7 +306,7 @@ test('panel host surface reads, navigates and writes only through removeEntry', 
 
 const boardPath = '/state/herdr-zstack/board.json';
 const boardRecord = id => `/repo/.herdr-tasks/${id}/task.json`;
-const boardFile = ids => JSON.stringify({schemaVersion: 1, sequence: ids.length + 1, tasks: ids.map(id => ({label: `Task ${id}`, record: boardRecord(id), machine: null}))});
+const boardFile = ids => JSON.stringify({schemaVersion: 1, sequence: ids.length + 1, tasks: ids.map(id => ({label: `Task ${id}`, record: boardRecord(id), machine: null, space: 'test-space'}))});
 const boardTask = id => JSON.stringify({...active, taskId: id, checkout: '/repo', brief: `.herdr-tasks/${id}/brief.md`, handoff: `.herdr-tasks/${id}/status.md`, artifacts: []});
 const flush = () => new Promise(resolve => setImmediate(resolve));
 // Watch loops run until closed, so tests start them and flush instead of awaiting them.
@@ -315,7 +315,7 @@ async function boardPanel(entries, props = {}) {
   const p = await panel(async path => { reads.push(path); return entries[path] ?? null; }, {board: boardPath, ...props});
   p.host.watch = path => new Promise(resolve => watches.push({path, resolve}));
   p.callbacks.shift()(p.cx);  // board loop
-  p.callbacks.shift();        // initial manual-mode read, superseded once the board lists tasks
+  if (props.tasks?.length) p.callbacks.shift(); // initial configured task read
   await flush();
   return {...p, reads, watches, entries, close: async () => { p.instance.close(); watches.forEach(w => w.resolve([])); await flush(); p.cleanup(); }};
 }
@@ -341,7 +341,7 @@ test('board notifications and Refresh restore a cleared roster with new active w
   for (const refresh of [false, true]) {
     const entries = rosterFiles(Object.fromEntries(run.members.map(member => [memberPath(member.taskId),
       JSON.stringify({...active, taskId: member.taskId, checkout: member.checkout, activity: 'completed'})])));
-    entries[boardPath] = JSON.stringify({schemaVersion: 1, sequence: 1, tasks: [{label: 'Roster', run: '/idx/run.json'}]});
+    entries[boardPath] = JSON.stringify({schemaVersion: 1, sequence: 1, tasks: [{label: 'Roster', space: 'test-space', run: '/idx/run.json'}]});
     const p = await boardPanel(entries);
     try {
       p.callbacks.length = 0;
@@ -493,7 +493,7 @@ const removedFile = '/state/herdr-zstack/board.removed.json';
 
 test('the X beside a board task asks first, then hides only that entry without writing the board', async () => {
   const p = await boardPanel({[boardPath]: boardFile(['b', 'a']), [boardRecord('b')]: boardTask('b')},
-    {tasks: [{label: 'Pinned', record: '/pinned/.herdr-tasks/p/task.json'}]});
+    {tasks: [{space: 'test-space', label: 'Pinned', record: '/pinned/.herdr-tasks/p/task.json'}]});
   const writes = boardWrites(p);
   const before = p.entries[boardPath];
   try {
@@ -553,7 +553,7 @@ test('a slow post-removal board read cannot replace a newer watched board', asyn
     const removal = p.callbacks.shift()(p.cx);
     await flush();
     assert.ok(release, 'the post-removal read is waiting');
-    p.entries[boardPath] = JSON.stringify({schemaVersion: 1, sequence: 9, tasks: ['c', 'b', 'a'].map(id => ({label: `Task ${id}`, record: boardRecord(id), machine: null}))});
+    p.entries[boardPath] = JSON.stringify({schemaVersion: 1, sequence: 9, tasks: ['c', 'b', 'a'].map(id => ({label: `Task ${id}`, record: boardRecord(id), machine: null, space: 'test-space'}))});
     p.watches.findLast(w => w.path === '/state/herdr-zstack').resolve([boardPath]);
     await flush();
     assert.deepEqual(p.instance.tasks.map(t => t.label), ['Task c', 'Task b']);
@@ -565,7 +565,7 @@ test('a slow post-removal board read cannot replace a newer watched board', asyn
 
 test('board updates keep the selected task and fall back when it is removed', async () => {
   const p = await boardPanel({[boardPath]: boardFile(['b', 'a']), [boardRecord('a')]: boardTask('a'), [boardRecord('b')]: boardTask('b')},
-    {tasks: [{label: 'Pinned', record: '/pinned/.herdr-tasks/p/task.json'}]});
+    {tasks: [{space: 'test-space', label: 'Pinned', record: '/pinned/.herdr-tasks/p/task.json'}]});
   assert.deepEqual(p.instance.tasks.map(t => t.label), ['Pinned', 'Task b', 'Task a'], 'layout tasks stay first');
   p.instance.taskIndex = 2;
   p.callbacks.length = 0;
@@ -586,7 +586,7 @@ test('board updates keep the selected task and fall back when it is removed', as
 test('a selected board duplicate keeps its identity and continues refreshing status after board updates', async () => {
   const status = '/repo/.herdr-tasks/a/status.md';
   const p = await boardPanel({[boardPath]: boardFile(['a']), [boardRecord('a')]: boardTask('a'), [status]: 'Initial status'},
-    {tasks: [{label: 'Pinned a', record: boardRecord('a')}]});
+    {tasks: [{space: 'test-space', label: 'Pinned a', record: boardRecord('a')}]});
   try {
     assert.deepEqual(p.instance.tasks.map(t => t.label), ['Pinned a', 'Task a']);
     assert.equal(p.instance.taskIndex, 0, 'layout entry keeps initial precedence');
@@ -618,7 +618,7 @@ test('a selected board duplicate keeps its identity and continues refreshing sta
 });
 
 test('a selected layout duplicate retains precedence through board reorder and removal', async () => {
-  const p = await boardPanel({[boardPath]: boardFile(['a'])}, {tasks: [{label: 'Pinned a', record: boardRecord('a')}]});
+  const p = await boardPanel({[boardPath]: boardFile(['a'])}, {tasks: [{space: 'test-space', label: 'Pinned a', record: boardRecord('a')}]});
   try {
     for (const ids of [['c', 'a'], ['c']]) {
       p.entries[boardPath] = boardFile(ids);
@@ -638,7 +638,7 @@ test('an unwatchable board says so, and Refresh retries it', async () => {
   assert.match(p.instance.boardState, /no tracked tasks yet.*Not watching the board.*no such folder/);
   p.callbacks.length = 0;
   byId(p.instance.render(p.cx), 'refresh').styles.on_click[0](undefined, p.cx);
-  assert.equal(p.callbacks.length, 2, 'board read plus manual file read');
+  assert.equal(p.callbacks.length, 1, 'board read only; no unrelated manual files');
   p.cleanup();
 });
 
@@ -669,7 +669,7 @@ test('an emptied board returns to manual mode and discards task reads still in f
   await late(p.cx);
   assert.deepEqual(p.instance.tasks, []);
   assert.equal(p.instance.recordState, null);
-  assert.equal(p.instance.files[0].path, '/notes.md', 'manual files return');
+  assert.deepEqual(p.instance.files, [], 'an empty board does not show unrelated manual files');
   await p.close();
 });
 
@@ -837,4 +837,94 @@ test('decision evidence keeps spaced and comma filenames and clicks only exact l
     }
     assert.deepEqual(reads, ['/notes.md', '/decisions.tsv', ...targets], 'no prefix, collapsed-space or unlisted path is read');
   } finally { p.cleanup(); }
+});
+
+test('space binding filters exact IDs and clears evidence before switching', async () => {
+  const tasks = [
+    {label: 'A', record: boardRecord('a'), space: 'test-space'},
+    {label: 'B', record: boardRecord('b'), space: 'remote/test-space'},
+    {label: 'Unbound', record: boardRecord('c')},
+  ];
+  const p = await boardPanel({[boardPath]: JSON.stringify({schemaVersion: 1, sequence: 1, tasks})});
+  try {
+    assert.deepEqual(p.instance.tasks.map(t => t.label), ['A']);
+    p.callbacks.length = 0;
+    p.instance.snapshot = {text: 'Old evidence'};
+    p.host.focus = {space: 'remote/test-space'};
+    p.instance.render(p.cx);
+    assert.equal(p.instance.snapshot, null);
+    assert.deepEqual(p.instance.files, []);
+    await p.callbacks.shift()(p.cx);
+    assert.deepEqual(p.instance.tasks.map(t => t.label), ['B']);
+    p.callbacks.length = 0;
+    p.host.focus = {space: 'missing'};
+    p.instance.render(p.cx);
+    await p.callbacks.shift()(p.cx);
+    assert.deepEqual(p.instance.tasks, []);
+    assert.deepEqual(p.instance.files, []);
+  } finally { await p.close(); }
+});
+
+test('no focused space hides configured tasks before a pending board read completes', async () => {
+  const reads = [];
+  const p = await panel(async path => { reads.push(path); return new Promise(() => {}); }, {
+    board: boardPath,
+    tasks: [
+      {label: 'Unbound', record: boardRecord('unbound')},
+      {label: 'Bound', record: boardRecord('bound'), space: 'test-space'},
+    ],
+  }, null);
+  try {
+    p.instance.render(p.cx);
+    assert.deepEqual(p.instance.tasks, []);
+    assert.deepEqual(p.instance.files, []);
+    assert.equal(p.instance.record, null);
+    assert.equal(p.callbacks.length, 1, 'only the board watcher is scheduled');
+    p.callbacks.shift()(p.cx);
+    await flush();
+    assert.deepEqual(reads, [boardPath], 'no task or evidence reads without a matching space');
+  } finally { p.instance.close(); p.cleanup(); }
+});
+
+test('board-backed record and run shorthand preserve explicit binding across focus changes', async () => {
+  for (const field of ['record', 'run']) {
+    const p = await panel(async () => null, {board: boardPath, [field]: '/task.json', space: 'test-space'});
+    try {
+      assert.equal(p.instance.tasks.length, 1);
+      p.callbacks.length = 0;
+      p.host.focus = {space: 'other'};
+      p.instance.render(p.cx);
+      await p.callbacks.shift()(p.cx);
+      assert.deepEqual(p.instance.tasks, []);
+      p.host.focus = {space: 'test-space'};
+      p.instance.render(p.cx);
+      await p.callbacks.shift()(p.cx);
+      assert.equal(p.instance.tasks[0][field], '/task.json');
+    } finally { p.instance.close(); p.cleanup(); }
+  }
+});
+
+test('switching spaces does not await off-space dismissal reads', async () => {
+  const tasks = [
+    {label: 'A', record: boardRecord('a'), space: 'test-space', board: true},
+    {label: 'B', record: boardRecord('b'), space: 'other', board: true},
+  ];
+  const p = await panel(async () => null, {board: boardPath});
+  try {
+    p.callbacks.length = 0;
+    p.instance.boardTasks = tasks;
+    const key = JSON.stringify([boardRecord('a'), null, null]);
+    p.instance.cleared.add(key);
+    const reads = [];
+    p.host.read = async path => { reads.push(path); return path === boardRecord('a') ? new Promise(() => {}) : null; };
+    p.host.focus = {space: 'other'};
+    p.instance.render(p.cx);
+    p.callbacks.shift()(p.cx);
+    await flush();
+    assert.deepEqual(p.instance.tasks.map(t => t.label), ['B']);
+    assert.ok(p.instance.cleared.has(key), 'off-space dismissal is preserved');
+    while (p.callbacks.length) { p.callbacks.shift()(p.cx); await flush(); }
+    assert.ok(reads.includes(boardRecord('b')));
+    assert.ok(!reads.includes(boardRecord('a')));
+  } finally { p.instance.close(); p.cleanup(); }
 });
