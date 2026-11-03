@@ -4,8 +4,8 @@ import { readFile, writeFile, mkdtemp, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { parseRecord, acceptanceStatus } from './task-record.js';
-import { writeRecord } from '../../records/task-record-store.mjs';
-const fixture = async name => JSON.parse(await readFile(new URL(`../../records/fixtures/${name}.json`,import.meta.url),'utf8'));
+import { writeRecord } from './task-record-store.mjs';
+const fixture = async name => JSON.parse(await readFile(new URL(`./fixtures/${name}.json`,import.meta.url),'utf8'));
 const observed = record => ({machine:record.machine,checkout:record.checkout,...record.revision});
 
 test('fixtures distinguish activity, missing worker, receipts and invalid input', async () => {
@@ -48,7 +48,7 @@ test('coordinator writes atomically, rejects stale sequence and preserves prior 
 test('revision observation includes staged, unstaged and untracked content but excludes task evidence', async () => {
   const { execFileSync } = await import('node:child_process');
   const { writeFile, mkdir } = await import('node:fs/promises');
-  const { observeRevision } = await import('../../records/task-record-store.mjs');
+  const { observeRevision } = await import('./task-record-store.mjs');
   const directory = await mkdtemp(join(tmpdir(),'task-revision-'));
   const git = (...args) => execFileSync('git',['-C',directory,...args]);
   try {
@@ -102,7 +102,7 @@ test('record creation preserves existing malformed JSON values', async () => {
 test('receipts become stale when Git hides tracked bytes or executable changes', async t => {
   const { execFileSync } = await import('node:child_process');
   const { chmod } = await import('node:fs/promises');
-  const { observeRevision } = await import('../../records/task-record-store.mjs');
+  const { observeRevision } = await import('./task-record-store.mjs');
   for (const kind of ['assume-unchanged', 'skip-worktree', 'filemode', 'autocrlf', 'attributes']) {
     await t.test(kind, async () => {
       const directory = await mkdtemp(join(tmpdir(), 'revision-hidden-'));

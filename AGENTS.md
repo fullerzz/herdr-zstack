@@ -12,12 +12,12 @@ This repository owns Herdr-specific execution workflows, mods, layouts, and runt
 - Use Conventional Commit messages: `type: description` or `type(scope): description`, such as `feat: add a collapsible task sidebar`, `fix: restore panel selection`, or `docs: update installation steps`.
 - Clone shipped layouts before changing them. Preserve personal layouts, keybindings, and other mods. Never infer the task's target from whichever terminal has focus.
 - Treat task identity, terminal/session identity, runtime activity, and acceptance as separate facts. A restored terminal may contain a fresh shell. Reconcile before sending prompts; never replay an assignment automatically.
-- Mods are trusted code. Keep Task & Evidence read-only apart from one write: its own removed-task list (`board.removed.json`) when the user confirms removing a board entry. It never writes the board, which coordinators own, or records and evidence; no command execution or agent messaging.
+- Mods are trusted code. The tab bar only switches layout panels and remembers each space's choice in its own `localStorage`; no file writes, command execution or agent messaging.
 
 ## Structure and verification
 
 Keep mods under `mods/`. Keep tests beside the code they exercise. Add workflow skills and layouts only when implementing their actual behavior; no placeholder skill activation.
 
-Run `node --test mods/task-evidence/*.test.mjs`, `herdr-app check mods/task-evidence`, `just check`, and `git diff --check` after relevant changes. Inspect the running UI after async reads, artifact selection, and refresh. Record actual host checks and their limits in `docs/validation.md`; a checker pass is not live UI proof.
+Run `node --test`, `herdr-app check mods/task-evidence-tabs`, `just check`, and `git diff --check` after relevant changes. Inspect the running UI after panel switching and space changes. Record actual host checks and their limits in `docs/validation.md`; a checker pass is not live UI proof.
 
 Keep generated `.d.ts`, `jsconfig.json`, error files, and local session state out of Git. Preserve license notices. Do not build a custom installer until the installation contract needs one.

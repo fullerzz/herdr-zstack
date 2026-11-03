@@ -6,7 +6,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { validateRun, parseRun, recordMemberAcceptance, recordPath, runPath, MAX_ROSTER } from './roster.mjs';
 import { writeRun, writeRecord } from '../records/task-record-store.mjs';
-import { validateRecord } from '../mods/task-evidence/task-record.js';
+import { validateRecord } from '../records/task-record.js';
 
 const fixture = async name => JSON.parse(await readFile(new URL(`../records/fixtures/${name}.json`, import.meta.url), 'utf8'));
 const revision = { commit: 'a'.repeat(40), worktreeDigest: `sha256:${'c'.repeat(64)}` };
@@ -235,7 +235,7 @@ test('members must have distinct resolved task-record paths', async () => {
 
 test('a Successor replaces a finished owner and is accepted at the restacked head', async () => {
   const { observeRevision } = await import('../records/task-record-store.mjs');
-  const { acceptanceStatus } = await import('../mods/task-evidence/task-record.js');
+  const { acceptanceStatus } = await import('../records/task-record.js');
   const base = await mkdtemp(join(tmpdir(), 'hc-successor-'));
   const git = (cwd, ...args) => execFileSync('git', ['-C', cwd, ...args], { encoding: 'utf8' }).trim();
   try {

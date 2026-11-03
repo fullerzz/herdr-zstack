@@ -5,27 +5,25 @@ import { promisify } from 'node:util';
 import { mkdir, mkdtemp, readFile, readdir, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { main, defaultBoard } from './task.mjs';
-import { updateBoard } from '../records/task-record-store.mjs';
-import { parseRecord, acceptanceStatus } from '../mods/task-evidence/task-record.js';
-import { DECISION_HEADER, parseDecisions } from '../mods/task-evidence/decisions.js';
+import { main } from './task.mjs';
+import { parseRecord, acceptanceStatus } from '../records/task-record.js';
+import { DECISION_HEADER, parseDecisions } from '../records/decisions.js';
 
 async function fixture(t) {
   const root = await mkdtemp(join(tmpdir(), 'task-cli-'));
   t.after(() => rm(root, { recursive: true, force: true }));
   const checkout = join(root, 'repo');
   execFileSync('git', ['init', '-q', checkout]);
-  const board = join(root, 'state', 'board.json');
   const output = [];
   let clock = 0;
-  const cli = (args, env = { HC_TERMINAL_ID: 't16' }) => main([...args, '--checkout', checkout, '--board', board],
+  const cli = (args, env = { HC_TERMINAL_ID: 't16' }) => main([...args, '--checkout', checkout],
     { env, cwd: root, now: () => `2026-11-01T00:00:0${clock++}Z`, out: line => output.push(line) });
-  return { root, checkout, board, cli, output, json: async path => JSON.parse(await readFile(path, 'utf8')) };
+  return { root, checkout, cli, output, json: async path => JSON.parse(await readFile(path, 'utf8')) };
 }
 
-test('start writes the coordinator record, brief, status and board entry', async t => {
+test('start writes the coordinator record, brief and status', async t => {
   const f = await fixture(t);
-  await f.cli(['start', '--task', 'fix-1', '--scope', 'mods/task-evidence', '--goal', 'Show agent status.']);
+  await f.cli(['start', '--task', 'fix-1', '--scope', 'records', '--goal', 'Show agent status.']);
   const recordPath = join(f.checkout, '.herdr-tasks/fix-1/task.json');
   const { record, errors } = parseRecord(await readFile(recordPath, 'utf8'));
   assert.deepEqual(errors, []);
@@ -35,10 +33,10 @@ test('start writes the coordinator record, brief, status and board entry', async
   assert.equal(record.worker, null);
   assert.equal(record.receipt, null);
   assert.equal(record.handoff, '.herdr-tasks/fix-1/status.md');
-  assert.match(await readFile(join(f.checkout, record.brief), 'utf8'), /## Goal\n\nShow agent status\./);
+  const brief = await readFile(join(f.checkout, record.brief), 'utf8');
+  assert.match(brief, /^# fix-1 · repo\n/);
+  assert.match(brief, /## Goal\n\nShow agent status\./);
   assert.match(await readFile(join(f.checkout, record.handoff), 'utf8'), /\*\*Now:\*\* Started\./);
-  const board = await f.json(f.board);
-  assert.deepEqual(board.tasks, [{ label: 'fix-1 · repo', record: recordPath, machine: null, added: 1 }]);
   assert.match(f.output.at(-1), /hc label t16 task=fix-1/);
   await assert.rejects(f.cli(['start', '--task', 'fix-1', '--scope', 's', '--goal', 'g']), /already exists/);
 });
@@ -49,14 +47,11 @@ for (const option of ['label', 'coordinator']) {
     const args = ['start', '--task', 'fix-1', '--scope', 's', '--goal', 'g'];
     await assert.rejects(f.cli([...args, `--${option}`, ' \t\n ']), new RegExp(option));
     await assert.rejects(readdir(join(f.checkout, '.herdr-tasks/fix-1')), { code: 'ENOENT' });
-    await assert.rejects(readFile(f.board), { code: 'ENOENT' });
 
     await f.cli([...args, `--${option}`, option === 'label' ? 'Fixed label' : 't16']);
-    const recordPath = join(f.checkout, '.herdr-tasks/fix-1/task.json');
-    assert.equal((await f.json(recordPath)).coordinator, 't16');
-    assert.deepEqual((await f.json(f.board)).tasks, [{
-      label: option === 'label' ? 'Fixed label' : 'fix-1 · repo', record: recordPath, machine: null, added: 1,
-    }]);
+    const folder = join(f.checkout, '.herdr-tasks/fix-1');
+    assert.equal((await f.json(join(folder, 'task.json'))).coordinator, 't16');
+    assert.match(await readFile(join(folder, 'brief.md'), 'utf8'), new RegExp(`^# ${option === 'label' ? 'Fixed label' : 'fix-1 · repo'}\n`));
   });
 }
 
@@ -76,9 +71,6 @@ test('concurrent starts keep all task evidence owned by the successful coordinat
     `# ${winner}\n\n## Goal\n\nGoal ${winner}\n\n## Scope\n\n${winner}\n\nOwner and coordinator: ${winner}\n`);
   const status = await readFile(join(folder, 'status.md'), 'utf8');
   assert.equal(status.split('\n').filter(line => line.startsWith('- ')).length, 1);
-  const board = await f.json(f.board);
-  assert.equal(board.sequence, 1);
-  assert.deepEqual(board.tasks, [{ label: winner, record: join(folder, 'task.json'), machine: null, added: 1 }]);
 });
 
 test('start preserves evidence in an existing task folder without a record', async t => {
@@ -149,45 +141,15 @@ test('only the recorded coordinator may update a task', async t => {
 test('the checkout must be a repository root', async t => {
   const f = await fixture(t);
   execFileSync('mkdir', [join(f.checkout, 'sub')]);
-  await assert.rejects(main(['start', '--task', 'x', '--scope', 's', '--goal', 'g', '--checkout', join(f.checkout, 'sub'), '--board', f.board],
+  await assert.rejects(main(['start', '--task', 'x', '--scope', 's', '--goal', 'g', '--checkout', join(f.checkout, 'sub')],
     { env: { HC_TERMINAL_ID: 't16' }, out: () => {} }), /repository root/);
-});
-
-test('board add and remove keep newest first and refuse malformed boards', async t => {
-  const f = await fixture(t);
-  await f.cli(['board', 'add', '--run', '/r/.herdr-tasks/run/run.json', '--label', 'Roster']);
-  await f.cli(['board', 'add', '--record', '/r/.herdr-tasks/a/task.json', '--label', 'A', '--machine', 'server']);
-  await f.cli(['board', 'add', '--run', '/r/.herdr-tasks/run/run.json', '--label', 'Roster again']);
-  assert.deepEqual((await f.json(f.board)).tasks.map(task => task.label), ['Roster again', 'A']);
-  await f.cli(['board', 'remove', '--record', '/r/.herdr-tasks/a/task.json']);
-  assert.equal((await f.json(f.board)).tasks.length, 2, 'machine is part of an entry identity');
-  await f.cli(['board', 'remove', '--record', '/r/.herdr-tasks/a/task.json', '--machine', 'server']);
-  assert.deepEqual((await f.json(f.board)).tasks.map(task => task.label), ['Roster again']);
-  await assert.rejects(f.cli(['board', 'add', '--record', 'relative.json', '--label', 'x']), /absolute/);
-  await writeFile(f.board, '{"schemaVersion":1,"sequence":1,"tasks":[{}]}');
-  await assert.rejects(f.cli(['board', 'add', '--record', '/x/task.json', '--label', 'x']), /malformed/);
-});
-
-test('concurrent board updates all land, in sequence', async t => {
-  const f = await fixture(t);
-  await Promise.all(Array.from({ length: 8 }, (_, i) =>
-    updateBoard(f.board, tasks => [{ label: `T${i}`, record: `/r/.herdr-tasks/t${i}/task.json`, machine: null }, ...tasks])));
-  const board = await f.json(f.board);
-  assert.equal(board.sequence, 8);
-  assert.equal(board.tasks.length, 8);
-});
-
-test('the default board follows HERDR_ZSTACK_BOARD, then XDG_STATE_HOME', () => {
-  assert.equal(defaultBoard({ HERDR_ZSTACK_BOARD: '/b.json', HOME: '/h' }), '/b.json');
-  assert.equal(defaultBoard({ XDG_STATE_HOME: '/s', HOME: '/h' }), '/s/herdr-zstack/board.json');
-  assert.equal(defaultBoard({ HOME: '/h' }), '/h/.local/state/herdr-zstack/board.json');
 });
 
 const decisionArgs = text => ['decide', '--task', 'race', '--phase=p', '--why=w', '--evidence=e', '--result=r', text];
 const taskCLI = new URL('./task.mjs', import.meta.url).pathname;
 const exec = promisify(execFile);
 const childCLI = (f, args) => exec(process.execPath, [taskCLI, ...args, '--checkout', f.checkout,
-  '--board', f.board, '--coordinator', 't16']);
+  '--coordinator', 't16']);
 
 for (const initialized of [false, true]) {
   test(`20 concurrent child decisions commit once each (${initialized ? 'existing' : 'fresh'} log)`, async t => {
@@ -281,14 +243,4 @@ test('first-use registration failure cannot append a decision', async t => {
   assert.equal(await readFile(join(folder, 'task.json'), 'utf8'), record);
   assert.equal(await readFile(join(folder, 'task.json.lock'), 'utf8'), 'acceptance owner');
   await assert.rejects(readFile(join(folder, 'decisions.tsv')), { code: 'ENOENT' });
-});
-
-test('start and re-registration carry explicit space bindings', async t => {
-  const f = await fixture(t);
-  await f.cli(['start', '--task', 'bound', '--scope', 's', '--goal', 'g', '--space', 'local-space']);
-  const entry = (await f.json(f.board)).tasks[0];
-  assert.equal(entry.space, 'local-space');
-  await f.cli(['board', 'add', '--record', entry.record, '--label', entry.label, '--space', 'remote/space']);
-  assert.equal((await f.json(f.board)).tasks[0].space, 'remote/space');
-  await assert.rejects(f.cli(['board', 'add', '--record', entry.record, '--label', entry.label, '--space', ' ']), /nonblank/);
 });

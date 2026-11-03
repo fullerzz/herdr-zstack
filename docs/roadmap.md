@@ -96,7 +96,7 @@ Implemented in #17: [supporting processes](../skills/hc-workflow/references/proc
 
 ### M6 — Task & Evidence v2 (still read-only)
 
-Implemented in #18: [roster views](../mods/task-evidence/README.md#rosters), refresh on core fact changes, and a [roster layout recipe](../examples/roster-layout.md), with [live inspection](validation.md#issue-18-multi-worker-rosters-in-task--evidence--2026-11-01). Computer-use follow-ups verified member selection, evidence navigation and Refresh in both an isolated window and the main sidebar.
+Implemented in #18: roster views, refresh on core fact changes, and a roster layout recipe, with [live inspection](validation.md#issue-18-multi-worker-rosters-in-task--evidence--2026-11-01). Computer-use follow-ups verified member selection, evidence navigation and Refresh in both an isolated window and the main sidebar. Retired on 2026-11-03: the Task & Evidence panel, its board and its layout recipes were removed. Task records, decision logs and run indexes remain.
 
 - Show roster views: workers, seats and supporting processes per task, each with its labels, binding status and receipt snapshot.
 - Refresh on `hc events`, keeping manual refresh as the fallback. Never infer acceptance from status.

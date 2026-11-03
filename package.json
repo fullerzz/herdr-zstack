@@ -4,6 +4,6 @@
   "type": "module",
   "scripts": {
     "test": "node --test",
-    "check:mod": "herdr-app check mods/task-evidence"
+    "check:mod": "herdr-app check mods/task-evidence-tabs"
   }
 }

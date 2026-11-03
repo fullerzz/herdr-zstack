@@ -1,9 +1,7 @@
-import { mkdir, open, readFile, rename, unlink } from 'node:fs/promises';
+import { open, readFile, rename, unlink } from 'node:fs/promises';
 import { randomUUID } from 'node:crypto';
-import { dirname } from 'node:path';
 import { setTimeout as delay } from 'node:timers/promises';
-import { validateRecord } from '../mods/task-evidence/task-record.js';
-import { validateBoard } from '../mods/task-evidence/board.js';
+import { validateRecord } from './task-record.js';
 
 export async function withFileLock(path, action, { waitMs = 0 } = {}) {
   const lockPath = `${path}.lock`;
@@ -64,31 +62,6 @@ export async function writeRun(path, run, { writer, expectedSequence = 0 }) {
   const { validateRun } = await import('../workflows/roster.mjs');
   await writeLocked(path, run, { writer, expectedSequence, validate: validateRun,
     identity: ['runId', 'coordinator', 'machine', 'checkout'] });
-}
-
-// Many coordinators share one board, so each update rereads it under the lock
-// and applies `change(tasks, nextSequence)`. A busy lock is retried briefly, never stolen.
-export async function updateBoard(path, change, { attempts = 40 } = {}) {
-  await mkdir(dirname(path), { recursive: true });
-  for (let attempt = 1; ; attempt++) {
-    try {
-      return await withFileLock(path, async () => {
-        let previous;
-        try { previous = JSON.parse(await readFile(path, 'utf8')); }
-        catch (error) { if (error.code !== 'ENOENT') throw error; }
-        if (previous !== undefined && validateBoard(previous).length) throw new Error('existing board is malformed');
-        const sequence = (previous?.sequence ?? 0) + 1;
-        const board = { schemaVersion: 1, sequence, tasks: change(previous?.tasks ?? [], sequence) };
-        const errors = validateBoard(board);
-        if (errors.length) throw new Error(errors.join('; '));
-        await writeAtomic(path, `${JSON.stringify(board, null, 2)}\n`);
-        return board;
-      });
-    } catch (error) {
-      if (error.code !== 'EEXIST' || attempt >= attempts) throw error;
-      await delay(25);
-    }
-  }
 }
 
 // Freeze task writers before observing; git does not provide an atomic worktree snapshot.

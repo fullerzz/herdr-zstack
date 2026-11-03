@@ -2,19 +2,18 @@
 default:
     @just --list
 
-# Type-check the Task & Evidence mod against the installed Herdr API.
+# Type-check the pure record helpers.
 check:
-    herdr-app types mods/task-evidence
     npx --yes --package typescript@7.0.2 tsc -p tsconfig.json
 
-# Install or update sidebar mods, hc templates, and both host plugins.
+# Install or update the tabs mod, hc templates, and both host plugins.
 install: update-sidebar install-templates install-codex install-claude-code
 
 # Install or update hc role templates with the CLI default models.
 install-templates:
     node scripts/install.mjs install --target templates --home "${XDG_CONFIG_HOME:-$HOME/.config}/herdr-core" --apply
 
-# Update the Task & Evidence sidebar mods from this checkout.
+# Update the tabs mod from this checkout; removes a previously installed Task & Evidence panel.
 update-sidebar:
     node scripts/install.mjs update --home "${HERDR_APP_HOME:-$HOME/.config/herdr-app}" --apply
 

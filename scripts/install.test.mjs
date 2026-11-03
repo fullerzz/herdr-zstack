@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import * as fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
+import { createHash } from 'node:crypto';
 import { run } from './install.mjs';
 
 function fixture(t) {
@@ -13,8 +14,8 @@ function fixture(t) {
   for (const name of ['main.js', 'model.js', 'task-record.js', 'mod.json']) fs.writeFileSync(path.join(source, name), name);
   fs.writeFileSync(path.join(source, 'host.d.ts'), 'generated');
   fs.writeFileSync(path.join(source, 'main.test.mjs'), 'test');
-  const call = (action, apply = true) => run({ home, source, tabsSource: null, action, apply });
-  const installed = name => path.join(home, 'mods/zstack-task-evidence', name);
+  const call = (action, apply = true) => run({ home, source, action, apply });
+  const installed = name => path.join(home, 'mods/zstack-task-evidence-tabs', name);
   return { home, source, call, installed, base };
 }
 
@@ -112,11 +113,12 @@ test('updates and rollback preserve hardlinked backups outside the app home', t 
   assert.equal(fs.readFileSync(installed('main.js'), 'utf8'), 'main.js');
 });
 
-test('default install owns both mods and rolls both back without touching layouts', t => {
+test('default install owns only the tabs clone and rolls it back without touching layouts', t => {
   const {home} = fixture(t);
   run({home, apply:true});
   const tab = path.join(home,'mods/zstack-task-evidence-tabs/main.js');
-  assert.match(fs.readFileSync(tab,'utf8'), /panelButton\("task-evidence"/);
+  assert.doesNotMatch(fs.readFileSync(tab,'utf8'), /task-evidence/);
+  assert.equal(fs.existsSync(path.join(home,'mods/zstack-task-evidence')), false);
   fs.mkdirSync(path.join(home,'layouts'));
   fs.writeFileSync(path.join(home,'layouts/personal.json'),'personal');
   run({home, action:'remove', apply:true});
@@ -124,6 +126,19 @@ test('default install owns both mods and rolls both back without touching layout
   run({home, action:'rollback', apply:true});
   assert.ok(fs.existsSync(tab));
   assert.equal(fs.readFileSync(path.join(home,'layouts/personal.json'),'utf8'),'personal');
+});
+
+test('update removes an earlier install of the retired panel and rollback restores it', t => {
+  const { home, call } = fixture(t);
+  const panel = path.join(home, 'mods/zstack-task-evidence/main.js');
+  fs.mkdirSync(path.dirname(panel), { recursive: true });
+  fs.writeFileSync(panel, 'panel');
+  const digest = createHash('sha256').update('panel').digest('hex');
+  fs.writeFileSync(path.join(home, '.herdr-zstack-install.json'), JSON.stringify({ version: 1, owned: { 'mods/zstack-task-evidence/main.js': digest }, previous: null }));
+  assert.ok(call('update').some(change => change.name === 'mods/zstack-task-evidence/main.js' && change.operation === 'remove'));
+  assert.equal(fs.existsSync(panel), false);
+  call('rollback');
+  assert.equal(fs.readFileSync(panel, 'utf8'), 'panel');
 });
 
 function templatesFixture(t) {
