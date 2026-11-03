@@ -1,6 +1,6 @@
 import { View, div } from "gpui-kit";
 import { v_flex, h_flex, TextView } from "gpui-base";
-import { agents, spaces, terminals, theme, readTextFile, writeTextFile, run, props, watchFolder } from "herdr";
+import { focused, agents, spaces, terminals, theme, readTextFile, writeTextFile, run, props, watchFolder } from "herdr";
 import { filesFor, taskSpace, taskChoices, recordFiles, taskActivity } from "./model.js";
 
 import { readMember, readRoster, rosterFacts, factKey } from "./roster.js";
@@ -21,8 +21,10 @@ export default class TaskEvidence extends View {
     this.config = props() ?? {};
     /** @type {TaskChoice[]} */
     this.configured = taskChoices(this.config);
+    /** @type {string | null} */
+    this.focusSpace = focused()?.space ?? null;
     /** @type {TaskChoice[]} */
-    this.tasks = this.configured;
+    this.tasks = this.configured.filter(task => !this.config.board || Boolean(this.focusSpace) && task.space === this.focusSpace);
     /** @type {TaskChoice[] | null} */
     this.boardTasks = [];
     /** @type {Set<string>} */
@@ -45,7 +47,7 @@ export default class TaskEvidence extends View {
     /** @type {string | null} */
     this.recordState = null;
     /** @type {EvidenceFile[]} */
-    this.files = filesFor(this.config);
+    this.files = this.config.board ? [] : filesFor(this.config);
     this.selected = 0;
     /** @type {Snapshot | null} */
     this.snapshot = null;
@@ -102,7 +104,8 @@ export default class TaskEvidence extends View {
       if (this.closed || request !== this.boardRequest) return;
       if (!completed) this.cleared.delete(boardKey(task));
     }
-    const next = [...this.configured, ...listed.filter(task => !this.cleared.has(boardKey(task)))];
+    const next = [...this.configured, ...listed.filter(task => !this.cleared.has(boardKey(task)))].filter(task =>
+      !this.config.board || Boolean(this.focusSpace) && task.space === this.focusSpace);
     if (JSON.stringify(next) === JSON.stringify(this.tasks)) return;
     const current = this.tasks[this.taskIndex];
     this.tasks = next;
@@ -116,7 +119,7 @@ export default class TaskEvidence extends View {
       // Back to manual mode: discard any task read still in flight.
       this.taskRequest = (this.taskRequest ?? 0) + 1;
       Object.assign(this, { taskWatch: null, watchKey: undefined, reading: false, factKey: undefined, roster: null, members: [],
-        memberIndex: 0, record: null, recordState: null, recordAt: null, files: filesFor(this.config), selected: 0 });
+        memberIndex: 0, record: null, recordState: null, recordAt: null, files: this.config.board ? [] : filesFor(this.config), selected: 0 });
       this.load(cx);
     }
   }
@@ -295,6 +298,16 @@ export default class TaskEvidence extends View {
 
   /** @param {Context} cx */
   render(cx) {
+    const focusSpace = focused()?.space ?? null;
+    if (this.config.board && this.focusSpace !== focusSpace) {
+      this.focusSpace = focusSpace;
+      this.confirmRemove = null;
+      this.taskRequest = (this.taskRequest ?? 0) + 1;
+      this.request = (this.request ?? 0) + 1;
+      Object.assign(this, { tasks: [], taskWatch: null, watchKey: undefined, record: null,
+        roster: null, members: [], files: [], snapshot: null, recordState: null, recordAt: null, reading: false });
+      cx.spawn(async cx => { await this.applyBoard(cx, this.boardTasks); if (!this.closed) cx.notify(); });
+    }
     // The host declares theme() as plain strings; its colors are hex values.
     const t = /** @type {Record<string, Color>} */ (theme());
     const choice = this.tasks[this.taskIndex];
@@ -305,7 +318,7 @@ export default class TaskEvidence extends View {
       // activity only, so nothing here is promoted to acceptance.
       if (key !== this.factKey) { this.factKey = key; this.loadTask(cx, { keep: true }); }
     }
-    const space = taskSpace(this.config, spaces());
+    const space = this.config.board ? spaces().find(s => s.id === this.focusSpace) : taskSpace(this.config, spaces());
     const live = space ? agents().filter(a => a.space === space.id) : [];
     const activity = taskActivity(this.record, live);
     const file = this.files[this.selected];
@@ -349,6 +362,7 @@ export default class TaskEvidence extends View {
           .children((fact?.terminals ?? []).map(term => div().text_size(11).text_color(t.muted).child(terminalLine(term)))));
     };
     let body = "Choose explicit notes and artifact paths in this panel's props. No task is inferred from terminal activity.";
+    if (this.config.board && !this.tasks.length) body = "No tracked task is bound to this space. Use task.mjs board add --space <id>.";
     if (file) {
       if (this.loading) body = "Reading file…";
       else if (this.snapshot?.error) body = `Unable to read file: ${this.snapshot.error}`;

@@ -1437,3 +1437,28 @@ Limits: per-space restoration and malformed configuration have harness coverage;
 they were not exercised live. No restart, theme, remote-machine, or non-macOS
 validation was performed. Existing hardcoded integrations still need the documented
 one-time migration before the installer will accept an update.
+
+## 2026-11-02 — explicit board space binding
+
+Board-backed panels filter entries by their explicit `space` field against
+`focused().space`. Switching spaces invalidates pending task and evidence reads
+and clears the old display. Unbound entries remain on disk but are hidden.
+Standalone manually configured panels retain their existing behavior.
+
+Register with `node scripts/task.mjs start ... --space <exact-space-id>`, or
+bind an existing entry with `node scripts/task.mjs board add --record <absolute-path>
+--label <label> --space <exact-space-id>` (use `--run` for a roster and preserve
+`--machine` for remote files). Obtain IDs from `herdr-app ls`; retain machine
+prefixes. No binding is inferred from focus, terminal activity, or checkout.
+
+Validation: focused Node panel/CLI tests, installed Herdr checker, TypeScript
+`just check` using a writable temporary npm cache, and `git diff --check`.
+Updated only the three changed installed mod files. Inspected the running
+sidebar after its asynchronous board read: the six existing unbound entries
+were hidden and the empty binding message rendered. Bound-task switching,
+artifact selection and refresh are covered by the harness, not a live bound
+task exercise; existing personal board entries were not modified.
+
+Follow-up: no-focus initialization now requires a nonempty focused space before
+matching configured tasks. The regression failed before the fix and passes
+afterward; it checks that a pending board read schedules no task/evidence reads.
