@@ -21,6 +21,8 @@ test('shipped instructions avoid reproduced hc pitfalls', () => {
     assert.doesNotMatch(text, /hc run [^\n`]*--bg[^\n`]*--rm|hc run [^\n`]*--rm[^\n`]*--bg|Add `--rm`/, `${file}: background --rm loses results`);
     // Read literally, "two directories above" a SKILL.md lands in skills/, not the plugin root.
     assert.doesNotMatch(text, /two directories above/, `${file}: ambiguous root path`);
+    // A bare `<command>` hides that one argument with a space or shell syntax runs under `sh -c` and other argv runs with no shell.
+    assert.doesNotMatch(text, /--cwd <checkout> <command>/, `${file}: launch recipe without an explicit command form`);
   }
 });
 
