@@ -1587,3 +1587,40 @@ followed by a wait on another terminal, then `hc wait t16-rmtest`, returned
 `not_found` with exit 3, and the exit code was lost. `processes.md` now forbids `--rm` on background
 checks, and `skill-text.test.mjs` rejects background `--rm` recipes.
 `node --test` passed 104 tests.
+
+## 2026-11-07 — hc command form, shell and environment
+
+hc 0.1.18 on macOS, plus machine `buntu26` (Linux) reached with `--on`. Probes
+ran from a Claude Code session. Every probe terminal was killed and removed.
+
+- `hc run` with no command: `hc get` reported `argv: ["/bin/zsh","-l"]` on macOS
+  and `["/usr/bin/zsh"]` on buntu26.
+- `hc run 'echo $0 …'` and `hc run -- 'echo 0=$0 && echo ok'` printed `0=sh`
+  on both hosts. On macOS, `hc get` recorded argv `["echo"]` for `hc run -- 'echo'`, but
+  `["sh","-c",…]` for `'echo hi'`, `'echo;echo'`, `'echo $0'` and `'true && echo x'`. One
+  argument with a space or shell syntax runs under `sh -c`; a bare word runs as a
+  program. Codex review t10g found the bare-word case.
+- `HCPROBE2=x hc run -- sh -c 'echo ${HCPROBE2:-unset}'` printed `unset`. A
+  caller's environment is not inherited. `hc run -- env HCPROBE=1 sh -c …`
+  printed `HCPROBE=1`. `PATH=/usr/bin:/bin hc exec sh -c 'echo $PATH'` printed
+  the core's full PATH: a caller change is not forwarded, and the core's value
+  stays.
+- Local `hc exec` and `hc run '<string>'` showed the same PATH, including the
+  mise shims, and resolved `uv`, `just`, `node` and `xh`.
+- On buntu26, `hc exec` and `hc run '<string>'` PATH held only `~/.local/bin`
+  plus system directories: `mise` resolved, but `uv` and `node` did not. In
+  an interactive bare shell there, both resolved from mise.
+
+Changes: the quick-check and server recipes in hc-workflow, hc-first and
+`processes.md` use `-- <program> <args>`. They now say one argument with a space or shell syntax
+runs under `sh -c`, the environment comes from the core rather than the caller, and remote
+PATH may lack rc-only tools. `processes.md` gained a shell and environment
+section, and its `--keep` row now says only macOS recovers to a login shell.
+The bare-wait default reads config `wait_timeout`, else 180 seconds.
+`skill-text.test.mjs` rejects the bare `--cwd <checkout> <command>` recipe.
+
+Limits: `--keep` recovery on Linux was not observed; the Linux row is the bare
+shell. It is untested whether `shell = [...]` replaces the `sh` used for a
+shell-command argument, and whether a `--` before a template name stops a template launch. The
+installed `z-agent-claude` template still says `<check command>`, and
+`install.test.mjs` pins that text; it was not changed or reinstalled.

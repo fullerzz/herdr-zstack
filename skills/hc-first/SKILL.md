@@ -22,19 +22,20 @@ Read `hc --skill` once per session before relying on the syntax below, and `hc <
 Keep in your own shell only file edits and commands you expect to finish in under about 30 seconds. Run anything slower, or of unknown length, like this:
 
 ```sh
-hc run --bg --no-notify --name "$HC_TERMINAL_ID-<purpose>" --cwd <checkout> <command>
+hc run --bg --no-notify --name "$HC_TERMINAL_ID-<purpose>" --cwd <checkout> -- <program> <args>
 hc wait <name> --timeout 90 --json    # reason: exit, exit_code
 hc read <name> --lines 100
 hc rm <name>
 ```
 
+- After `--`, hc runs the program directly, with no shell and no rc files. A single argument that contains a space or shell syntax, such as `-- 'cd app && bun test'`, runs under POSIX `sh -c`, not your login shell. The program gets the core's login-session environment, not your shell's: an `export` or activated virtualenv does not carry over, so pass variables with `-- env K=V <program>`.
 - Names are unique among all live terminals in the core, not per caller. The `$HC_TERMINAL_ID-` prefix keeps yours from colliding with another agent's. If a launch fails, for example with `name_taken`, fix it before anything else; never wait on, read or remove a name you did not start.
-- Keep `--timeout` below your shell tool's own command limit. Claude Code's Bash tool stops waiting after 120 seconds by default and moves the command to a background task. A bare `hc wait` uses hc's default of 180 seconds.
+- Keep `--timeout` below your shell tool's own command limit. Claude Code's Bash tool stops waiting after 120 seconds by default and moves the command to a background task. A bare `hc wait` uses hc's default: config `wait_timeout`, else 180 seconds.
 - `reason: timeout` is a check-in. Wait again on the same name; never start a duplicate.
 - Keep working while it runs. Start several independent checks at once, then collect each with `hc wait --children any --timeout 90`.
 - Only `exit_code: 0` with `reason: exit` from `hc wait` passes (`hc get` reports the same exit as `reason: exited`). Report the command, its exit code and the output you read.
 - A CI watch: `hc run --bg --no-notify --name "$HC_TERMINAL_ID-ci" --cwd <checkout> -- gh run watch <id> --exit-status`, then `hc wait "$HC_TERMINAL_ID-ci" --timeout 90`.
-- A server: `hc run --bg --name "$HC_TERMINAL_ID-<purpose>" --cwd <checkout> <command>`, then `hc wait <name> --output "<ready text>" --timeout 30` started right after the launch. `--output` matches only text printed after the wait begins, so after `reason: timeout` run `hc read <name>` before waiting again: the server may already be ready.
+- A server: `hc run --bg --name "$HC_TERMINAL_ID-<purpose>" --cwd <checkout> -- <program> <args>`, then `hc wait <name> --output "<ready text>" --timeout 30` started right after the launch. `--output` matches only text printed after the wait begins, so after `reason: timeout` run `hc read <name>` before waiting again: the server may already be ready.
 - Never sleep or poll for anything hc runs. `hc wait` replaces host background shells, sleep loops and monitor tools.
 
 The [supporting processes](../hc-workflow/references/processes.md) reference covers readiness, exit evidence and persistence in full.

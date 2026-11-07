@@ -14,7 +14,7 @@ With Herdr selected, hc replaces the host's own background and delegation tools.
 
 | Instead of | Use |
 |---|---|
-| A test suite, build, install or other command you expect to take over about 30 seconds, or of unknown length, in your own shell | `hc run --bg --no-notify --name "$HC_TERMINAL_ID-<purpose>" --cwd <checkout> <command>`, then `hc wait <name> --timeout 90`, `hc read <name> --lines 100`, `hc rm <name>` |
+| A test suite, build, install or other command you expect to take over about 30 seconds, or of unknown length, in your own shell | `hc run --bg --no-notify --name "$HC_TERMINAL_ID-<purpose>" --cwd <checkout> -- <program> <args>`, then `hc wait <name> --timeout 90`, `hc read <name> --lines 100`, `hc rm <name>` |
 | The host's background shell, such as Claude Code's `run_in_background` | The same `hc run --bg` |
 | A sleep, poll or until-loop, or a host monitor tool | `hc wait <t> --timeout 90` for exit, `hc wait <t> --output "<text>" --timeout 90` for readiness, `hc wait --children any --timeout 90` for the next of several |
 | A CI watch in the foreground | `hc run --bg --no-notify --name "$HC_TERMINAL_ID-ci" --cwd <checkout> -- gh run watch <id> --exit-status`, then `hc wait "$HC_TERMINAL_ID-ci" --timeout 90` |
@@ -23,15 +23,18 @@ With Herdr selected, hc replaces the host's own background and delegation tools.
 
 The [quick background check](references/processes.md#quick-background-check) tier in supporting processes is the full procedure for the first rows. It needs no run index or record. Keep in your own shell only file edits and commands you expect to finish in under about 30 seconds.
 
-Three rules keep these rows correct:
+Four rules keep these rows correct:
 
+- **Command form.** Pass the program and its arguments after `--`. hc runs them directly, with no shell and no rc files. A single argument that contains a space or shell syntax, such as `-- 'cd app && bun test'`, runs under POSIX `sh -c`, not your login shell, so zsh syntax, aliases and functions are unavailable. `hc run` also starts a template when the first word names one, so check `hc templates` when a program name could collide.
 - **Unique names.** Terminal names are unique among all live terminals in the core, not per caller. Prefix every name with your own `$HC_TERMINAL_ID`. If a launch fails, for example with `name_taken`, fix it before any wait, read or remove; never act on a name you did not start.
-- **Waits shorter than the host's command limit.** Pass `--timeout` below your shell tool's own limit. Claude Code's Bash tool stops waiting after 120 seconds by default and moves the command to a background task, the tool this table replaces. A bare `hc wait` uses hc's default of 180 seconds. A `reason: timeout` is a check-in: wait again.
-- **Readiness after a timeout.** `--output` matches only text printed after the wait starts. After a `reason: timeout`, run `hc read <t>` before waiting again; the text may already be there.
+- **Waits shorter than the host's command limit.** Pass `--timeout` below your shell tool's own limit. Claude Code's Bash tool stops waiting after 120 seconds by default and moves the command to a background task, the tool this table replaces. A bare `hc wait` uses hc's default: config `wait_timeout`, else 180 seconds. A `reason: timeout` is a check-in: wait again.
+- **Readiness after a timeout.** `--output` matches only text printed after the wait starts, so text printed between the launch and the wait is missed. Start the wait right after the launch. After a `reason: timeout`, run `hc read <t>` before waiting again; the text may already be there.
 
 Delegation still needs the playbook, the host's permission and the user's authority, and it still passes the Gate below. This table changes how authorized work runs, not whether it runs.
 
 hc runs a program in the core, outside your host's sandbox and outside the permission check on the inner command. Use it only for commands you would run directly anyway. Never use it to get past a sandbox refusal, a permission denial or a blocked dialog. Never add a broad allow rule such as `Bash(hc run *)`: it would allow any command.
+
+The program also gets the core's login-session environment, not your shell's. An activated virtualenv, an `export` or a per-directory hook in your shell does not carry over. Pass variables explicitly with `-- env K=V <program>`, and set `--cwd` so per-directory tool versions such as mise's resolve there. On another machine (`--on`), PATH may lack tools that only that machine's rc files add, such as mise shims. Check first with `hc exec --on <machine> sh -c 'command -v <tool>'`.
 
 Read these first:
 
