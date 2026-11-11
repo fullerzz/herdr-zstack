@@ -80,9 +80,9 @@ has stopped; review any temporary state before moving it aside.
 | Template | Command |
 |---|---|
 | `z-agent-claude` | `claude --permission-mode auto --disallowedTools 'Bash(hc send *--force*)' --allowedTools 'Bash(hc send -- *)'` |
-| `z-agent-codex` | `codex --no-daemon --sandbox workspace-write --ask-for-approval never` |
+| `z-agent-codex` | `codex --no-daemon --approve-for-me` |
 | `comment-sicko-claude` | `claude --permission-mode auto --disallowedTools Write,Edit,NotebookEdit 'Bash(hc send *--force*)' --allowedTools 'Bash(hc send -- *)'` |
-| `comment-sicko-codex` | `codex --no-daemon --sandbox workspace-write --ask-for-approval never` |
+| `comment-sicko-codex` | `codex --no-daemon --approve-for-me` |
 
 The Claude allow rule covers only `hc send -- …`. After `--`, hc parses every
 argument as text, so no quoting of `--force` can turn it into a flag. Any other
@@ -104,8 +104,12 @@ the absolute z-mode path, the coordinator's literal address, the task ID and, fo
 `z-agent`, the report path. `comment-sicko` writes no file: it leaves its report on
 screen for `hc read` and sends one status line.
 
-`comment-sicko-codex` uses `workspace-write` because Codex 0.166.0's `read-only`
-sandbox blocks `hc send` (`cannot start core: Operation not permitted`). Neither
+Both Codex templates start with `--approve-for-me`, Codex's automatic review
+mode. It keeps the workspace-write sandbox and sends each approval request to
+Codex's reviewer instead of asking, so a worker does not stop at a prompt. The
+flag cannot be combined with `--sandbox` or `--ask-for-approval`. Codex
+0.166.0's `read-only` sandbox blocks `hc send`
+(`cannot start core: Operation not permitted`), so no template uses it. Neither
 `comment-sicko` variant enforces read-only behavior with a sandbox; the role
 forbids writes and the coordinator checks the checkout afterwards.
 

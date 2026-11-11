@@ -1661,7 +1661,27 @@ prompting after three blocks in a row were not exercised. Auto mode on another
 machine, and under an account or model where it is unavailable, is untested.
 The restricted seat recipes were not changed or rerun.
 
-### Interrogation
+### Codex workers launch with approve-for-me
+
+Added after the interrogation below, at the user's request. Codex 0.167.1.
+
+- `codex --no-daemon --sandbox workspace-write --approve-for-me` and
+  `codex --no-daemon --approve-for-me --ask-for-approval never` both exited
+  with a usage error: the flag cannot be combined with either option.
+- `codex --no-daemon --approve-for-me` with no task started with
+  `Custom permissions · Approve for me` in the status line.
+- A read-only probe, `t15m`, used that argv with a task. It read z-mode's
+  `SKILL.md` outside its checkout, ran `git status --short` and ran
+  `hc send -- t16 "codex-probe done"`. No prompt appeared and the note reached
+  `t16`. The probe was killed and removed.
+
+Changes: both Codex templates use `codex --no-daemon --approve-for-me`.
+Operations no longer forbids that flag for workers; seats still do.
+
+Limits: no approval request reached the reviewer in the probe, so a reviewed
+escalation and a reviewer refusal were not observed. Edits and the folder-trust
+dialog in a new directory were not exercised. The adversaries did not test
+this change.
 
 Two Claude Opus 5.5 adversaries in auto mode (`t14z`, `t150`) and one sandboxed
 Codex GPT-6-Astra seat (`t151`) each worked in a detached worktree. Their live
