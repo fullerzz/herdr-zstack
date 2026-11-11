@@ -79,15 +79,21 @@ has stopped; review any temporary state before moving it aside.
 
 | Template | Command |
 |---|---|
-| `z-agent-claude` | `claude --disallowedTools 'Bash(hc send *--force*)' --allowedTools 'Bash(hc send -- *)'` |
+| `z-agent-claude` | `claude --permission-mode auto --disallowedTools 'Bash(hc send *--force*)' --allowedTools 'Bash(hc send -- *)'` |
 | `z-agent-codex` | `codex --no-daemon --sandbox workspace-write --ask-for-approval never` |
-| `comment-sicko-claude` | `claude --disallowedTools Write,Edit,NotebookEdit 'Bash(hc send *--force*)' --allowedTools 'Bash(hc send -- *)'` |
+| `comment-sicko-claude` | `claude --permission-mode auto --disallowedTools Write,Edit,NotebookEdit 'Bash(hc send *--force*)' --allowedTools 'Bash(hc send -- *)'` |
 | `comment-sicko-codex` | `codex --no-daemon --sandbox workspace-write --ask-for-approval never` |
 
 The Claude allow rule covers only `hc send -- …`. After `--`, hc parses every
 argument as text, so no quoting of `--force` can turn it into a flag. Any other
 `hc send` form goes through the normal permission flow. The deny rule refuses
 the literal `--force` spelling even when the user's permission mode would allow it.
+
+Both Claude templates start in auto mode, so a worker does not stop at each
+shell command or at a read outside its checkout. Claude Code's classifier
+reviews those actions instead, and deny rules still apply. Auto mode is not a
+sandbox and does not enforce the brief's write scope. If auto mode is unavailable
+to the session, Claude Code starts in Manual and the worker prompts again.
 
 Each body carries the role, the instruction to read z-mode's `SKILL.md` first,
 the no-delegation rule and the report route. The task given to `hc run` must supply
