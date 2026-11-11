@@ -1624,3 +1624,78 @@ shell. It is untested whether `shell = [...]` replaces the `sh` used for a
 shell-command argument, and whether a `--` before a template name stops a template launch. The
 installed `z-agent-claude` template still says `<check command>`, and
 `install.test.mjs` pins that text; it was not changed or reinstalled.
+
+## 2026-11-10 — Claude workers launch in auto mode
+
+Host: hc 0.1.20, Claude Code 2.1.322 on macOS, coordinator `t16`.
+
+Cause: three live workers under another coordinator (`t14s`, `t14t`, `t14v`)
+had been launched directly with `--permission-mode acceptEdits`. No guidance
+named a worker permission mode, and operations said never to use
+"auto-approval flags". One report recorded a rejected prompt for the read of
+z-mode's `SKILL.md`, outside the worktree. All three screens later showed
+`auto mode on`, so the mode had been switched by hand.
+
+Checks:
+
+- `hc run --bg … -- claude --permission-mode auto --disallowedTools 'Bash(hc send *--force*)' --allowedTools 'Bash(hc send -- *)'`
+  with no task started with `auto mode on`. The same command without the flag
+  also did: this version starts interactive sessions in auto mode by default.
+  The flag makes the launch explicit rather than changing this host's result.
+- A read-only probe, `t14y`, used that argv with `--model claude-haiku-5-5`
+  and a task after `--`. It read
+  `/Users/zachfuller/Code/Misc/zachs-agent-skills/skills/z-mode/SKILL.md`
+  outside its checkout, ran `git status --short` and `node --version`, and ran
+  `hc send -- t16 "auto-probe done"`. No prompt appeared, and the note reached
+  `t16`. The probe was killed, confirmed `finished` and removed.
+
+Changes: both Claude templates start with `--permission-mode auto`.
+Operations, the worker lifecycle and installation name auto mode for Claude
+workers and forbid flags that skip permission checks.
+
+Limits: this host's `~/.claude.json` already had
+`hasSeenAutoModeOutsideReadPrompt: true`, so no probe shows the first
+outside-read prompt a fresh host gets. No installed template was launched; the installed copies were not
+updated. Edits, protected-path writes, a classifier block and the fallback to
+prompting after three blocks in a row were not exercised. Auto mode on another
+machine, and under an account or model where it is unavailable, is untested.
+The restricted seat recipes were not changed or rerun.
+
+### Codex workers launch with approve-for-me
+
+Added after the interrogation below, at the user's request. Codex 0.167.1.
+
+- `codex --no-daemon --sandbox workspace-write --approve-for-me` and
+  `codex --no-daemon --approve-for-me --ask-for-approval never` both exited
+  with a usage error: the flag cannot be combined with either option.
+- `codex --no-daemon --approve-for-me` with no task started with
+  `Custom permissions · Approve for me` in the status line.
+- A read-only probe, `t15m`, used that argv with a task. It read z-mode's
+  `SKILL.md` outside its checkout, ran `git status --short` and ran
+  `hc send -- t16 "codex-probe done"`. No prompt appeared and the note reached
+  `t16`. The probe was killed and removed.
+
+Changes: both Codex templates use `codex --no-daemon --approve-for-me`.
+Operations no longer forbids that flag for workers; seats still do.
+
+Limits: no approval request reached the reviewer in the probe, so a reviewed
+escalation and a reviewer refusal were not observed. Edits and the folder-trust
+dialog in a new directory were not exercised. The adversaries did not test
+this change.
+
+Two Claude Opus 5.5 adversaries in auto mode (`t14z`, `t150`) and one sandboxed
+Codex GPT-6-Astra seat (`t151`) each worked in a detached worktree. Their live
+probes showed `auto mode on`, the task delivered, `hc send --force` denied
+including a quote-split spelling, and comment-sicko's Write and Edit denial
+held. Eight template mutations failed the tests.
+
+One finding was reproduced and fixed. Operations said `acceptEdits` asks for
+every shell command. A probe with `--permission-mode acceptEdits` ran
+`date +%Y > year.txt` in its cwd with no prompt, then blocked at
+`git -C <worktree> status --short` with `This command requires approval`. The
+sentence now says those modes still stop at a prompt for shell commands. The
+cause of the unprompted first command was not isolated.
+
+Limits: no test pins the guidance text; a changed lifecycle sentence still
+passed `node --test scripts/`. The Codex seat's full-suite run was blocked by
+its sandbox at a socket bind.

@@ -79,15 +79,24 @@ has stopped; review any temporary state before moving it aside.
 
 | Template | Command |
 |---|---|
-| `z-agent-claude` | `claude --disallowedTools 'Bash(hc send *--force*)' --allowedTools 'Bash(hc send -- *)'` |
-| `z-agent-codex` | `codex --no-daemon --sandbox workspace-write --ask-for-approval never` |
-| `comment-sicko-claude` | `claude --disallowedTools Write,Edit,NotebookEdit 'Bash(hc send *--force*)' --allowedTools 'Bash(hc send -- *)'` |
-| `comment-sicko-codex` | `codex --no-daemon --sandbox workspace-write --ask-for-approval never` |
+| `z-agent-claude` | `claude --permission-mode auto --disallowedTools 'Bash(hc send *--force*)' --allowedTools 'Bash(hc send -- *)'` |
+| `z-agent-codex` | `codex --no-daemon --approve-for-me` |
+| `comment-sicko-claude` | `claude --permission-mode auto --disallowedTools Write,Edit,NotebookEdit 'Bash(hc send *--force*)' --allowedTools 'Bash(hc send -- *)'` |
+| `comment-sicko-codex` | `codex --no-daemon --approve-for-me` |
 
 The Claude allow rule covers only `hc send -- …`. After `--`, hc parses every
 argument as text, so no quoting of `--force` can turn it into a flag. Any other
 `hc send` form goes through the normal permission flow. The deny rule refuses
 the literal `--force` spelling even when the user's permission mode would allow it.
+
+Both Claude templates start in auto mode, so a worker does not stop at each
+shell command or at a read outside its checkout. Claude Code's classifier
+reviews those actions instead, and deny rules still apply. One prompt remains:
+until you have answered it once on a host, Claude Code asks before the first
+read outside the working directories, and both templates read z-mode's
+`SKILL.md` first. Answer it yourself in the worker's terminal. Auto mode is not a
+sandbox and does not enforce the brief's write scope. If auto mode is unavailable
+to the session, Claude Code starts in Manual and the worker prompts again.
 
 Each body carries the role, the instruction to read z-mode's `SKILL.md` first,
 the no-delegation rule and the report route. The task given to `hc run` must supply
@@ -95,8 +104,12 @@ the absolute z-mode path, the coordinator's literal address, the task ID and, fo
 `z-agent`, the report path. `comment-sicko` writes no file: it leaves its report on
 screen for `hc read` and sends one status line.
 
-`comment-sicko-codex` uses `workspace-write` because Codex 0.166.0's `read-only`
-sandbox blocks `hc send` (`cannot start core: Operation not permitted`). Neither
+Both Codex templates start with `--approve-for-me`, Codex's automatic review
+mode. It keeps the workspace-write sandbox and sends each approval request to
+Codex's reviewer instead of asking, so a worker does not stop at a prompt. The
+flag cannot be combined with `--sandbox` or `--ask-for-approval`. Codex
+0.166.0's `read-only` sandbox blocks `hc send`
+(`cannot start core: Operation not permitted`), so no template uses it. Neither
 `comment-sicko` variant enforces read-only behavior with a sandbox; the role
 forbids writes and the coordinator checks the checkout afterwards.
 

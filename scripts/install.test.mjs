@@ -160,9 +160,11 @@ test('shipped templates carry the role contract, report route and per-CLI comman
     assert.match(frontmatter, new RegExp(`^name: ${file.slice(0, -3)}$`, 'm'));
     assert.match(frontmatter, /^description: \S/m);
     const command = /^command: (.*)$/m.exec(frontmatter)[1];
-    if (file.includes('codex')) assert.match(command, /^codex --no-daemon --sandbox workspace-write --ask-for-approval never$/);
-    else assert.match(command, /^claude --disallowedTools (\S+ )?'Bash\(hc send \*--force\*\)' --allowedTools 'Bash\(hc send -- \*\)'$/);
+    if (file.includes('codex')) assert.match(command, /^codex --no-daemon --approve-for-me$/);
+    else assert.match(command, /^claude --permission-mode auto --disallowedTools (\S+ )?'Bash\(hc send \*--force\*\)' --allowedTools 'Bash\(hc send -- \*\)'$/);
     assert.doesNotMatch(command, /(-m|--model|effort)\b/);
+    // An unattended worker must not stop at each command, and nothing may skip permission checks.
+    assert.doesNotMatch(command, /bypassPermissions|dangerously/);
     assert.match(body, /read z-mode's `SKILL\.md` from the absolute path in the task/);
     assert.match(body, /Do not start agents, subagents or terminals, including `hc run`/);
     assert.match(body, /^hc send -- <coordinator address from the task> "<task id> <done\|blocked>: /m);
@@ -217,11 +219,11 @@ test('template collisions, edits and foreign ownership entries abort before writ
 test('explicit model and effort overrides render per CLI and nothing is baked in', t => {
   const { call, installed } = templatesFixture(t);
   call('install');
-  assert.equal(/^command: (.*)$/m.exec(fs.readFileSync(installed('z-agent-claude.md'), 'utf8'))[1], "claude --disallowedTools 'Bash(hc send *--force*)' --allowedTools 'Bash(hc send -- *)'");
+  assert.equal(/^command: (.*)$/m.exec(fs.readFileSync(installed('z-agent-claude.md'), 'utf8'))[1], "claude --permission-mode auto --disallowedTools 'Bash(hc send *--force*)' --allowedTools 'Bash(hc send -- *)'");
   const changes = call('update', { overrides: { claude: { effort: 'high' }, codex: { model: 'gpt-x', effort: 'low' } } });
   assert.equal(changes.length, 4);
-  assert.match(fs.readFileSync(installed('z-agent-claude.md'), 'utf8'), /^command: claude --disallowedTools 'Bash\(hc send \*--force\*\)' --allowedTools 'Bash\(hc send -- \*\)' --effort high$/m);
-  assert.match(fs.readFileSync(installed('comment-sicko-codex.md'), 'utf8'), /^command: codex --no-daemon --sandbox workspace-write --ask-for-approval never -m gpt-x -c model_reasoning_effort=low$/m);
+  assert.match(fs.readFileSync(installed('z-agent-claude.md'), 'utf8'), /^command: claude --permission-mode auto --disallowedTools 'Bash\(hc send \*--force\*\)' --allowedTools 'Bash\(hc send -- \*\)' --effort high$/m);
+  assert.match(fs.readFileSync(installed('comment-sicko-codex.md'), 'utf8'), /^command: codex --no-daemon --approve-for-me -m gpt-x -c model_reasoning_effort=low$/m);
   call('rollback');
   assert.doesNotMatch(fs.readFileSync(installed('z-agent-codex.md'), 'utf8'), /-m gpt-x/);
   assert.throws(() => call('update', { overrides: { claude: { effort: 'turbo' } } }), /Invalid claude effort/);
