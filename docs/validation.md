@@ -1653,7 +1653,9 @@ Changes: both Claude templates start with `--permission-mode auto`.
 Operations, the worker lifecycle and installation name auto mode for Claude
 workers and forbid flags that skip permission checks.
 
-Limits: no installed template was launched; the installed copies were not
+Limits: this host's `~/.claude.json` already had
+`hasSeenAutoModeOutsideReadPrompt: true`, so no probe shows the first
+outside-read prompt a fresh host gets. No installed template was launched; the installed copies were not
 updated. Edits, protected-path writes, a classifier block and the fallback to
 prompting after three blocks in a row were not exercised. Auto mode on another
 machine, and under an account or model where it is unavailable, is untested.

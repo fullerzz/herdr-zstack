@@ -91,7 +91,10 @@ the literal `--force` spelling even when the user's permission mode would allow 
 
 Both Claude templates start in auto mode, so a worker does not stop at each
 shell command or at a read outside its checkout. Claude Code's classifier
-reviews those actions instead, and deny rules still apply. Auto mode is not a
+reviews those actions instead, and deny rules still apply. One prompt remains:
+until you have answered it once on a host, Claude Code asks before the first
+read outside the working directories, and both templates read z-mode's
+`SKILL.md` first. Answer it yourself in the worker's terminal. Auto mode is not a
 sandbox and does not enforce the brief's write scope. If auto mode is unavailable
 to the session, Claude Code starts in Manual and the worker prompts again.
 
