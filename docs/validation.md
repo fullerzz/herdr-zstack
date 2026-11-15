@@ -10,7 +10,7 @@ payload SHA-256; no personal inventory or transcript is included here.
 Checks completed on Node 24.22.3, Codex CLI 0.169.0 and Claude Code 2.1.325:
 
 - `node --test` with `HERDR_TEST_CODEX` and `HERDR_TEST_CLAUDE` set to installed
-  absolute CLI paths: **113 passed, 0 failed, 0 skipped**, exit 0.
+  absolute CLI paths: **115 passed, 0 failed, 0 skipped**, exit 0.
   Without those opt-in variables, the host-installation test is skipped.
 - The opt-in `scripts/plugin-refresh.test.mjs` used disposable host configurations
   and sources containing spaces, and captured fresh `plugin list --json`
@@ -35,6 +35,13 @@ Checks completed on Node 24.22.3, Codex CLI 0.169.0 and Claude Code 2.1.325:
   ambiguous registrations, disabled Claude and Codex entries, other-project and
   subdirectory scopes, unsupported scopes, invalid metadata paths,
   same-version content drift, mismatched manifests and blocked Node shims.
+  PR review reproduced missed same-version drift in the task runtime; changing
+  only `records/`, `workflows/` or `templates/` now changes the fingerprint,
+  rejects a stale Codex cache, and succeeds after refresh.
+  Independent review also reproduced an old launcher silently validating a newer
+  payload and a symlinked main-module guard skipping execution. Regressions now
+  require an explicit reload/restart diagnostic for the former and matching
+  canonical/symlinked launcher results for the latter.
   The launcher returns a bootstrap failure (exit 2) for a missing companion
   module, a module syntax error and a report-less exit 1; the previous
   `exec` launcher exited 1 with no output on the syntax error. A throwing
@@ -48,7 +55,7 @@ Checks completed on Node 24.22.3, Codex CLI 0.169.0 and Claude Code 2.1.325:
   restrictions and verified the live hc caller. The new launcher separately
   detected local source/cache content drift and returned exit 2 with session
   detection untested. No personal plugin installation or sandbox policy changed.
-- Coordinator rerun after the follow-up fixes: all 113 tests passed with the
+- Coordinator rerun after the follow-up fixes: all 115 tests passed with the
   host-CLI checks enabled; `just check`, `sh -n scripts/preflight.sh` and
   `git diff --check` also exited 0.
 - Live Claude launcher with fresh `claude plugin list --json` metadata inside an

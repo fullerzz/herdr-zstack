@@ -29,7 +29,7 @@ export function provenance(root) {
       for (const child of fs.readdirSync(file).sort()) visit(`${relative}/${child}`);
     } else hash.update(relative).update('\0').update(fs.readFileSync(file)).update('\0');
   };
-  for (const file of ['.claude-plugin/plugin.json', '.codex-plugin/plugin.json', 'skills', 'scripts', 'docs']) visit(file);
+  for (const file of ['.claude-plugin/plugin.json', '.codex-plugin/plugin.json', 'skills', 'scripts', 'docs', 'records', 'workflows', 'templates']) visit(file);
   for (const file of ['skills/hc-workflow/SKILL.md', 'scripts/preflight.mjs']) fs.accessSync(path.join(root, file));
   return { path: root, version: manifests[0].version, sha256: hash.digest('hex') };
 }
@@ -71,7 +71,10 @@ export function resolveCompanion({ host, home = os.homedir(), env = process.env,
   const selected = provenance(roots[0]);
   for (const candidate of candidates) {
     if (candidate.version && candidate.version !== selected.version) throw new Error('installation version mismatch; refresh the host plugin, capture fresh metadata and restart');
-    if (candidate.source && provenance(candidate.source).sha256 !== selected.sha256) throw new Error('installation content mismatch; refresh the host plugin and restart');
+    if (candidate.source) {
+      if (!fs.existsSync(candidate.source)) throw new Error('local source missing or unreadable; content drift cannot be verified; restore the source or refresh its marketplace registration');
+      if (provenance(candidate.source).sha256 !== selected.sha256) throw new Error('installation content mismatch; refresh the host plugin and restart');
+    }
   }
   const stale = candidates.filter(c => c.registered && c.registered.version !== selected.version).map(c => c.registered);
   return { status: 'supported', ...selected, via: candidates[0].via, ...(stale.length && { staleRegistrations: stale }) };
@@ -91,11 +94,19 @@ export async function main(args) {
     else if (flag === '--metadata') metadata = value;
     else throw new Error(`Unknown argument: ${flag}`);
   }
+  if (!['claude', 'codex'].includes(host)) throw new Error('--host must be claude or codex');
+  if (!metadata || !path.isAbsolute(metadata)) throw new Error('--metadata requires an absolute path to a fresh host plugin listing');
   const bootstrap = { status: 'supported', executable: fs.realpathSync(process.execPath), version: process.version };
   const untested = { status: 'untested' };
   let companion, report;
   try {
     companion = resolveCompanion({ host, metadata });
+    const executing = provenance(fileURLToPath(new URL('..', import.meta.url)));
+    if (executing.sha256 !== companion.sha256) {
+      return emit({ bootstrap, companion: { ...companion, status: 'unavailable', executing,
+        reason: 'the loaded companion differs from the host-selected payload',
+        action: 'Reload the host skills or restart the session, then use the selected companion launcher' }, session: untested }, 2);
+    }
   } catch (error) {
     return emit({ bootstrap, companion: { status: 'unavailable', reason: error.message, action: 'Check host metadata, refresh the selected plugin and restart the host session' }, session: untested }, 2);
   }
@@ -110,7 +121,7 @@ export async function main(args) {
   return emit({ ...report, companion, bootstrap }, report.session.status === 'supported' ? 0 : 1);
 }
 
-if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
+if (process.argv[1] && fs.existsSync(process.argv[1]) && fs.realpathSync(process.argv[1]) === fileURLToPath(import.meta.url)) {
   // Finish module evaluation before importing a probe that imports provenance from here.
   main(process.argv.slice(2)).then(code => { process.exitCode = code; }).catch(error => {
     emit({ bootstrap: { status: 'failed', reason: error.message }, session: { status: 'untested' } }, 2);

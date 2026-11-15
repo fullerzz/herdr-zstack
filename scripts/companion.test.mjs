@@ -20,6 +20,10 @@ function fixture(t) {
     write(path.join(root, 'skills/hc-workflow/SKILL.md'), 'current guidance');
     write(path.join(root, 'scripts/preflight.mjs'), probe);
     write(path.join(root, 'docs/installation.md'), 'installation');
+    write(path.join(root, 'records/task-record-store.mjs'), 'export const revision = 1;');
+    write(path.join(root, 'workflows/roster.mjs'), 'export const revision = 1;');
+    write(path.join(root, 'templates/z-agent-claude.md'), 'worker guidance');
+    for (const file of ['companion.mjs', 'preflight.sh']) write(path.join(root, 'scripts', file), fs.readFileSync(path.join(checkout, 'scripts', file), 'utf8'));
     return root;
   };
   // Entry shape copied from `claude plugin list --json` (Claude Code 2.1.325) in disposable configs.
@@ -99,6 +103,16 @@ test('Codex metadata ignores stale caches and detects same-version content drift
   assert.throws(resolve, /content mismatch/);
   fs.cpSync(source, current, { recursive: true });
   assert.equal(resolve().sha256, provenance(source).sha256);
+  for (const file of ['records/task-record-store.mjs', 'workflows/roster.mjs', 'templates/z-agent-claude.md']) {
+    const before = provenance(source).sha256;
+    fs.appendFileSync(path.join(source, file), '\nchanged runtime payload\n');
+    assert.notEqual(provenance(source).sha256, before, file);
+    assert.throws(resolve, /content mismatch/, file);
+    fs.cpSync(source, current, { recursive: true });
+    assert.equal(resolve().sha256, provenance(source).sha256, file);
+  }
+  write(metadata, { installed: [{ ...entry, source: { source: 'local', path: path.join(home, 'moved source') } }] });
+  assert.throws(resolve, /local source missing or unreadable; content drift cannot be verified/);
   write(metadata, { installed: [{ ...entry, enabled: false }] });
   assert.throws(resolve, /missing or disabled/);
   write(metadata, { installed: [{ ...entry, marketplaceName: '../escape' }] });
@@ -119,8 +133,9 @@ test('bootstrap failure is not a missing caller; approved Node runs from unrelat
   const blocked = path.join(home, 'blocked shim');
   write(blocked, '#!/bin/sh\necho "Operation not permitted" >&2\nexit 1\n');
   fs.chmodSync(blocked, 0o755);
-  const launcher = path.join(checkout, 'scripts/preflight.sh');
-  const metadata = listing([claudeEntry({ installPath: plugin(path.join(home, 'active plugin')) })]);
+  const root = plugin(path.join(home, 'active plugin'));
+  const launcher = path.join(root, 'scripts/preflight.sh');
+  const metadata = listing([claudeEntry({ installPath: root })]);
   bootstrapFailed(launch(launcher, blocked, home, ['--metadata', metadata]), /approved absolute Node/);
   const result = launch(launcher, process.execPath, home, ['--metadata', metadata]);
   assert.equal(result.status, 1, result.stderr);
@@ -145,11 +160,41 @@ test('a missing, unparseable or reportless companion module is a bootstrap failu
   bootstrapFailed(launch(launcher, process.execPath, home), /Node exited 1 without a valid preflight report/);
 });
 
+test('an old launcher refuses a different selected payload; canonical and symlink paths agree', t => {
+  const { home, plugin, claudeEntry, listing } = fixture(t);
+  const old = plugin(path.join(home, 'old'), '0.1.0');
+  const current = plugin(path.join(home, 'current'));
+  const metadata = listing([claudeEntry({ installPath: current })]);
+  const stale = launch(path.join(old, 'scripts/preflight.sh'), process.execPath, home, ['--metadata', metadata]);
+  assert.equal(stale.status, 2, stale.stderr);
+  const report = JSON.parse(stale.stdout);
+  assert.equal(report.companion.status, 'unavailable');
+  assert.equal(report.companion.executing.path, old);
+  assert.equal(report.companion.path, current);
+  assert.match(report.companion.action, /Reload.*restart/);
+  assert.equal(report.session.status, 'untested');
+  const alias = path.join(home, 'symlink');
+  fs.symlinkSync(current, alias, 'dir');
+  for (const root of [current, alias]) {
+    const result = launch(path.join(root, 'scripts/preflight.sh'), process.execPath, home, ['--metadata', metadata]);
+    assert.equal(result.status, 1, result.stderr);
+    assert.equal(JSON.parse(result.stdout).companion.path, current);
+  }
+});
+
+test('invalid host and metadata arguments are bootstrap usage failures', t => {
+  const { home } = fixture(t);
+  const launcher = path.join(checkout, 'scripts/preflight.sh');
+  for (const [args, reason] of [[['--host', 'clade'], /--host must/], [[], /--metadata requires/], [['--metadata', 'relative.json'], /--metadata requires/]]) {
+    bootstrapFailed(launch(launcher, process.execPath, home, args), reason);
+  }
+});
+
 test('a selected probe that fails keeps companion provenance and is reported as a probe failure', t => {
   const { home, write, plugin, claudeEntry, listing } = fixture(t);
   const root = plugin(path.join(home, 'plugin'), '0.1.1', 'export const preflight = async () => { throw new Error("probe bug: socket parse"); };');
   const metadata = listing([claudeEntry({ installPath: root })]);
-  const launcher = path.join(checkout, 'scripts/preflight.sh');
+  const launcher = path.join(root, 'scripts/preflight.sh');
   const failed = launch(launcher, process.execPath, home, ['--metadata', metadata]);
   assert.equal(failed.status, 2, failed.stderr);
   const report = JSON.parse(failed.stdout);

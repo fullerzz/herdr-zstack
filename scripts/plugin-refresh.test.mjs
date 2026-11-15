@@ -24,7 +24,7 @@ test('host CLIs refresh local and Git installations', { skip: !codex || !claude 
       const source = path.join(base, 'source with spaces'), config = path.join(base, 'config');
       fs.mkdirSync(source, { recursive: true });
       fs.mkdirSync(config);
-      for (const file of ['.claude-plugin', '.codex-plugin', 'scripts', 'skills', 'docs']) {
+      for (const file of ['.claude-plugin', '.codex-plugin', 'scripts', 'skills', 'docs', 'records', 'workflows', 'templates']) {
         fs.cpSync(path.join(repo, file), path.join(source, file), { recursive: true });
       }
       const env = {

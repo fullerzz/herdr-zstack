@@ -255,6 +255,10 @@ catalog or trusted hook, following symlinks to its real absolute path. Its root
 holds `skills/` and `scripts/`. Shared initial discovery remains owned by zstack;
 the companion validates host selection before importing the selected probe.
 Never select the newest-looking cache directory or search other checkouts.
+The launcher also compares its own payload with the host-selected payload.
+If they differ, it reports both provenances and requires a skill reload or
+session restart before probing hc; stale loaded guidance cannot silently
+validate a different installation. Symlinked paths resolve to the real module.
 
 Use an approved absolute Node executable, obtained from the installed runtime's
 metadata or the host's tool inventory. A shell alias is not an executable. If a
@@ -318,7 +322,9 @@ Selection contract:
   unsupported metadata fails explicitly. A local source's payload must match
   the selected cache, even when the version labels agree.
 - The result reports canonical path, manifest version, selection provenance and
-  a SHA-256 over both manifests, `skills/`, `scripts/` and `docs/`. This fingerprint
+  a SHA-256 over both manifests, `skills/`, `scripts/`, `docs/`, `records/`,
+  `workflows/` and `templates/`. This includes the task command's imported runtime
+  and worker role guidance. This fingerprint
   detects payload drift; it is not a signature or proof of authenticity. No Git
   command, network request or core startup is needed. Only synthetic fixtures
   belong in published evidence.
