@@ -42,7 +42,9 @@ Host restrictions, available sandbox enforcement, user authorization, and the ho
 
 Before dispatch, record each requirement as **supported**, **unavailable**, or **untested**, with the command/evidence and consequence. Command presence alone does not establish runtime proof.
 
-`node scripts/preflight.mjs` emits the machine-checkable part of this matrix as JSON. It exits 0 for a supported native session, 1 when the session is unavailable, and 2 on a usage or internal error, including a flag without a value.
+Use the [preflight launcher](installation.md#preflight-bootstrap-and-installation-selection) with an approved absolute Node executable and a fresh `claude plugin list --json` or `codex plugin list --json` listing captured in the executing checkout. It selects one canonical, host-enabled companion and reports its version, source and payload digest before detection. Bootstrap, installation and probe failures exit 2 with session detection untested; they are not evidence that hc is absent. Exit 0 or 1 always carries a matching JSON report. Missing or conflicting installations require host refresh/restart, never a cache guess or permission change. Shared initial host routing remains owned by zstack.
+
+The direct `preflight.mjs` diagnostic emits the machine-checkable part of this matrix as JSON. It exits 0 for a supported native session, 1 when the session is unavailable, and 2 on a usage or internal error, including a flag without a value. It reports executing companion provenance but marks host selection unverified; use the launcher before dispatch.
 
 Discovery details:
 - The report covers hc, herdr-app, core and zstack versions against the baseline, the core ID, the caller address and parent topology, templates, machines, and the installed zstack path.

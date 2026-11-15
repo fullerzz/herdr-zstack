@@ -26,6 +26,11 @@ install-codex:
 update-codex:
     codex plugin add herdr-zstack@herdr-zstack-local
 
+# Fetch a Git-source marketplace before refreshing the Codex plugin.
+update-codex-git:
+    codex plugin marketplace upgrade herdr-zstack-local
+    codex plugin add herdr-zstack@herdr-zstack-local
+
 # Install or update the Claude Code plugin from this checkout.
 install-claude-code:
     claude plugin install herdr-zstack --marketplace "{{ justfile_directory() }}"

@@ -9,8 +9,10 @@ A slow command in your own shell blocks you until it ends: no messages, no child
 
 ## When this applies
 
+`<root>` holds `skills/`: this file's real path is `<root>/skills/hc-first/SKILL.md`.
+
 1. `HC_TERMINAL_ID` is set. Otherwise stop; this skill does not apply.
-2. Once per session, before the first hc command, run the read-only preflight: `node "<root>/scripts/preflight.mjs"`. `<root>` is the directory that holds `skills/`: this file's real path is `<root>/skills/hc-first/SKILL.md`. Continue only if `session.status` is `supported`. Do not run `hc server status`, `hc get` or other core commands to check instead: they can start a core that is not there. If preflight is missing or fails, stay with your own shell and say why once.
+2. Once per session, before the first hc command, follow the [bootstrap contract](../../docs/installation.md#preflight-bootstrap-and-installation-selection): resolve this skill's real absolute root and run `/bin/sh "<root>/scripts/preflight.sh" "<approved-absolute-node>" --host <claude|codex> --metadata <absolute-plugin-list.json>`, from the same working directory where you just captured `claude plugin list --json` or `codex plugin list --json` into that file. Continue only if both `companion.status` and `session.status` are `supported`. A bootstrap, installation or probe failure leaves session detection untested; it does not mean hc is absent. Do not run `hc server status`, `hc get` or other core commands to check instead: they can start a core that is not there. If preflight is missing or fails, stay with your own shell and report the specific gap once.
 3. If this session explicitly selected Native execution, stop; that choice wins.
 4. If you are a worker that a coordinator started, stop unless your task or role template explicitly allows hc terminals for checks. Preflight's `caller.template` names your template when one launched you. Your template and task govern; for example, the Codex role templates ban `hc run` because an hc terminal runs outside their sandbox.
 5. If z-mode is active and Herdr is selected, the herdr-zstack `hc-workflow` companion governs. Its "Default to hc" table matches this skill.
