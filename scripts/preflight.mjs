@@ -4,6 +4,7 @@ import net from 'node:net';
 import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { provenance } from './companion.mjs';
 
 // Read-only capability preflight for the native hc execution contract.
 // It never launches, sends, signals or writes. The hc CLI starts a core on demand
@@ -209,6 +210,8 @@ export async function preflight({ env = process.env, home = os.homedir(), platfo
 
   return {
     schema: 1, generatedAt: now().toISOString(), readOnly: true, baseline, host: resolvedHost,
+    companion: { status: 'unverified', ...provenance(fileURLToPath(new URL('..', import.meta.url))), reason: 'Direct probe only; use preflight.sh to verify host selection and source contents' },
+    bootstrap: { status: 'supported', executable: fs.realpathSync(process.execPath), version: process.version },
     session, hc: checks.hc, herdrApp: checks.herdrApp, core: checks.core, caller: checks.caller,
     templates: checks.templates, machines: checks.machines, zstack: checks.zstack,
     operations: operations(session.status === 'supported', checks), commands, requests,

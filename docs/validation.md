@@ -1,5 +1,71 @@
 # Validation
 
+## Issue 44: companion selection and bootstrap — 2026-11-15
+
+The companion launcher validates executing-host installation metadata before
+importing the selected probe. Both manifests now declare `0.1.1`. The local
+report includes canonical path, manifest version, selection provenance and a
+payload SHA-256; no personal inventory or transcript is included here.
+
+Checks completed on Node 24.22.3, Codex CLI 0.169.0 and Claude Code 2.1.325:
+
+- `node --test` with `HERDR_TEST_CODEX` and `HERDR_TEST_CLAUDE` set to installed
+  absolute CLI paths: **113 passed, 0 failed, 0 skipped**, exit 0.
+  Without those opt-in variables, the host-installation test is skipped.
+- The opt-in `scripts/plugin-refresh.test.mjs` used disposable host configurations
+  and sources containing spaces, and captured fresh `plugin list --json`
+  metadata before every selection. Both hosts installed version `0.1.1`, moved
+  to fixture version `0.1.2` with changed guidance and payload digest, and
+  launched the actual selected probe. Claude Git and Codex Git kept the old
+  selection until the host refresh changed it; Codex local refused the stale
+  cache until refresh. A Claude directory marketplace selected the edited source
+  before any refresh, as the host reports in `readFromFolder`. Its refresh only
+  updated the registered cache record, which was reported meanwhile as
+  `staleRegistrations`. All four combinations passed. Git tests
+  use an invocation-only URL rewrite to a local Git fixture; they verify host
+  Git-source update handling, not live GitHub transport or a published release.
+- Disposable Claude Code 2.1.325 configurations established the Claude listing
+  contract: `enabled` follows user, project and local settings for the cwd but
+  is reported per plugin id, so another project's entry appears enabled;
+  project settings matched the exact cwd, not a subdirectory of the project;
+  `readFromFolder` names nested directory sources; and `plugin details` shows
+  the catalog version, not the loaded installation. No host precedence between
+  differing user and project roots was observable, so that case fails closed.
+- Fixtures cover stale/current caches, nested Claude directory sources,
+  ambiguous registrations, disabled Claude and Codex entries, other-project and
+  subdirectory scopes, unsupported scopes, invalid metadata paths,
+  same-version content drift, mismatched manifests and blocked Node shims.
+  The launcher returns a bootstrap failure (exit 2) for a missing companion
+  module, a module syntax error and a report-less exit 1; the previous
+  `exec` launcher exited 1 with no output on the syntax error. A throwing
+  selected probe reports `probe.status: failed` with companion provenance kept.
+  A probe returning `session.status: untested` also fails as an incomplete probe,
+  rather than producing exit 1; the coordinator reproduced and fixed this case.
+  Existing preflight tests still cover absent caller identity, unreachable core,
+  read-only command/RPC allowlists and no core startup.
+- A sandboxed bare-Node attempt failed in the version-manager shim. An installed
+  absolute Node executable ran the same read-only probe under the same host
+  restrictions and verified the live hc caller. The new launcher separately
+  detected local source/cache content drift and returned exit 2 with session
+  detection untested. No personal plugin installation or sandbox policy changed.
+- Coordinator rerun after the follow-up fixes: all 113 tests passed with the
+  host-CLI checks enabled; `just check`, `sh -n scripts/preflight.sh` and
+  `git diff --check` also exited 0.
+- Live Claude launcher with fresh `claude plugin list --json` metadata inside an
+  hc terminal: exit 0 with bootstrap, companion and session supported, no probe
+  failure. Before the host registration was refreshed, the same launcher
+  reported the registered `0.1.0` cache as `staleRegistrations` while selecting
+  the `0.1.1` source.
+
+Limits: managed policy settings and per-session `--plugin-dir` or `--settings`
+overrides were not exercised; the latter are invisible to a separately run
+listing. Project-scope matching rests on `claude plugin list`, not on a live
+session started in a subdirectory. Initial z-mode routing in the separately installed zstack hook remains
+upstream-owned; it has not been updated here. Older loaded skill instructions
+need a host refresh/restart to use the new launcher. No plugin was published,
+no live GitHub delivery was tested, and no mod/UI behavior changed or required
+revalidation. Installation tests do not establish live skill-catalog reload.
+
 ## Issue 1: execution contract — 2026-10-31
 
 Documentation-only capability baseline; no worker was launched and no session controls were enabled.

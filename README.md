@@ -4,7 +4,7 @@ Herdr-specific workflows and native UI for zstack. This repository owns integrat
 
 ## Available now
 
-- [Execution contract](docs/execution-contract.md): native operation matrix, capability preflight, zstack compatibility, and single-worker ownership boundaries. `node scripts/preflight.mjs` reports native-session detection and the capability matrix as read-only JSON.
+- [Execution contract](docs/execution-contract.md): native operation matrix, capability preflight, zstack compatibility, and single-worker ownership boundaries. The [preflight launcher](docs/installation.md#preflight-bootstrap-and-installation-selection) verifies host installation metadata and an explicit Node executable before reporting native-session detection as read-only JSON.
 - [Task records and revision receipts](docs/task-record.md): shared schema, coordinator writer, local revision observation, and fail-closed acceptance checks.
 - [Installation](docs/installation.md): reproducible namespaced tab-bar installation, personal layout recipe, and CI checks.
 - [hc workflow companion](skills/hc-workflow/SKILL.md): the hc-native port of zstack's `herdr-workflow`, with [operations](skills/hc-workflow/references/operations.md) for a bounded roster of 1–3 task-owned workers and a coordinator-owned [run index](docs/task-record.md#run-index-for-a-roster). It ships as the `herdr-zstack:hc-workflow` plugin skill; see [installation](docs/installation.md#hc-companion-skills).

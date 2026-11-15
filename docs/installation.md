@@ -248,6 +248,115 @@ Restart the host session after installation or updating. Claude Code also suppor
 directories against public repository revision `ebec254`; live skill discovery
 remains unverified.
 
+### Preflight bootstrap and installation selection
+
+Resolve the loaded `hc-workflow` or `hc-first` skill through the executing host's
+catalog or trusted hook, following symlinks to its real absolute path. Its root
+holds `skills/` and `scripts/`. Shared initial discovery remains owned by zstack;
+the companion validates host selection before importing the selected probe.
+Never select the newest-looking cache directory or search other checkouts.
+
+Use an approved absolute Node executable, obtained from the installed runtime's
+metadata or the host's tool inventory. A shell alias is not an executable. If a
+version-manager shim fails, report a **bootstrap failure**. An already installed
+executable may be used under the same sandbox when allowed; do not change
+permissions, install a runtime, or move the probe to hc to evade a denial.
+The launcher verifies Node by asking for `process.execPath`, then invokes that
+executable without a shell command string. It never automatically tries another
+runtime after a refusal.
+
+Both hosts need fresh host metadata. From the executing checkout, capture the
+installed host CLI's plugin listing, then pass its absolute filename (the
+launcher itself only reads it). For Claude Code:
+
+```sh
+claude plugin list --json > /absolute/task/installed-plugins.json
+/bin/sh "/absolute/companion/scripts/preflight.sh" "/approved/bin/node" --host claude --metadata /absolute/task/installed-plugins.json
+```
+
+For Codex:
+
+```sh
+codex plugin list --json > /absolute/task/installed-plugins.json
+/bin/sh "/absolute/companion/scripts/preflight.sh" "/approved/bin/node" --host codex --metadata /absolute/task/installed-plugins.json
+```
+
+Do not reuse a listing after installing, updating, enabling or disabling a
+plugin. Capture it in the executing host's configuration and checkout so host
+settings apply, and run the launcher from that same working directory. Keep
+listings and probe output local; they contain personal paths. The Node and
+launcher paths may contain spaces.
+
+Selection contract:
+
+- Claude consumes the `herdr-zstack` entries in `claude plugin list --json`
+  whose `enabled` is true. The host CLI computes that flag from its own
+  settings for the capture directory, so a plugin disabled in user, project
+  (`.claude/settings.json`) or local (`.claude/settings.local.json`) settings
+  is not selected. This helper reads no settings file and never enables a
+  plugin. An entry with `readFromFolder` (a directory marketplace) selects that
+  folder, which the host reports and loads; otherwise the absolute
+  `installPath` is selected and its `version` must match the manifest.
+  `folderVersion`, when present, must also match.
+- Claude reports `enabled` per plugin id, so another project's `project` or
+  `local` entry appears enabled wherever the id is enabled. Those entries
+  apply only when `projectPath` is the launcher's working directory. Claude
+  Code 2.1.325 matched project settings to the exact directory, not an
+  enclosing Git root. A user and a project installation with different roots
+  in the same directory are ambiguous: no observed host precedence decides
+  between them, so resolve them in the host. Any other scope, such as
+  `managed`, fails as unsupported. A separately run listing cannot see
+  per-session overrides such as `--plugin-dir` or `--settings`; they are
+  unsupported. Managed policy settings were not exercised.
+- A directory marketplace loads its source folder without a refresh; the
+  registered cache record can lag behind it. Such a record is reported as
+  informational `companion.staleRegistrations`; it does not reject the folder.
+- Codex consumes the enabled, installed `herdr-zstack` entries in
+  `codex plugin list --json`. Each entry's marketplace and version select exactly
+  `CODEX_HOME/plugins/cache/<marketplace>/herdr-zstack/<version>` (default
+  `~/.codex`). Other cached versions are ignored. Missing, conflicting or
+  unsupported metadata fails explicitly. A local source's payload must match
+  the selected cache, even when the version labels agree.
+- The result reports canonical path, manifest version, selection provenance and
+  a SHA-256 over both manifests, `skills/`, `scripts/` and `docs/`. This fingerprint
+  detects payload drift; it is not a signature or proof of authenticity. No Git
+  command, network request or core startup is needed. Only synthetic fixtures
+  belong in published evidence.
+
+Exit 2 indicates a bootstrap, installation or probe failure and leaves
+`session.status` untested. `bootstrap.status: failed` means Node or the
+companion module did not produce a valid report. `companion.status:
+unavailable` means host selection failed. `probe.status: failed` means the
+selected, verified probe threw; its companion provenance is kept, and
+reinstalling the same payload will not fix it. Node itself exits 1 on any
+uncaught load error, so the launcher accepts exit 0 or 1 only with a matching
+JSON report and otherwise reports a bootstrap failure.
+Exit 1 means the probe ran but native-session detection failed; its
+reason distinguishes missing caller identity from an unreachable core. Exit 0
+requires supported companion selection and a supported session. Direct
+`preflight.mjs` remains a diagnostic interface: it reports the executing payload
+as `companion.status: unverified`, and does not verify host selection. Upstream
+zstack integrations should consume this launcher contract rather than interpret
+a bare-Node launch failure as an absent caller.
+
+### Release and refresh contract
+
+Bump both `.claude-plugin/plugin.json` and `.codex-plugin/plugin.json` together
+for every published companion change, including guidance. Version `0.1.1`
+introduces the bootstrap contract. Do not republish changed contents under an
+existing version. The regression suite checks manifest agreement and hashes
+guidance as well as code; identical cache labels alone do not prove freshness.
+
+For a local marketplace, update the checkout first, then use `just update-codex`
+or `just update-claude-code`. For a GitHub-source Codex install, use
+`just update-codex-git` (marketplace upgrade followed by plugin add); Claude uses
+marketplace update followed by plugin update. These are host plugin operations,
+not responsibilities of the mod/template installer. Restart the host session
+(or `/reload-plugins` in Claude), capture fresh metadata, and rerun bootstrap.
+An old session can retain old instructions even after files refresh. A content
+or version mismatch is actionable: refresh the selected host installation and
+restart; never repair it by copying arbitrary cache files or changing permissions.
+
 ### Presentation and verification
 
 For presentation, follow [the portable recipe](../examples/layout-recipe.md).
