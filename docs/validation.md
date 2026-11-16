@@ -1,5 +1,55 @@
 # Validation
 
+## Issue 45: activation and persisted selection — 2026-11-15
+
+The implementation is coordinated with `hooks/session_start.py` and
+`scripts/test_activation.py` in `fullerzz/agent-skills`. The shared control owns
+activation, the fresh host listing, verified companion preflight, and the
+selection write. This repository only updates the execution contract and
+companion guidance; `scripts/preflight.mjs` remains read-only.
+
+Publication verification bumps the companion to `0.1.2` and zstack to `0.27.0`.
+Fresh Python and Node suites retain the pass/skip counts below. Strict mypy
+passes for the changed hook and new tests; the full shared check reports the
+same unrelated `scripts/test_pr_watcher.py:750` error on both this change and a
+clean archive of base `aef9f55`. No PR-watcher code was changed.
+
+- Shared Python discovery: **165 passed**, exit 0. Thirteen new tests exercise
+  both host names, eligible and absent callers, explicit Native, a Native or
+  Disable arriving during preflight, changed activation, failed and malformed
+  probes, denied activation/selection, partial Disable, resume/compact, and
+  fresh-fork isolation. Writes serialize under a POSIX directory lock; the
+  probe runs outside that lock. Existing hook regressions also pass.
+- Shared structural validator: **58 skills, zero problems**, exit 0. Ruff on
+  the changed shared hook and new tests passes. This repository's `node --test`:
+  **114 passed, one optional host-installation test skipped**, exit 0.
+  `just check` and both repositories' `git diff --check` passed.
+- Shared `node --test scripts/*.test.mjs`: **212 passed, 61 optional skips**,
+  exit 0. Initial runs exposed existing mise trust and PTY output-format
+  sensitivity in installer tests. Installed executable directories ahead of
+  shims and output captured to a file resolved them; no installer code or
+  personal trust configuration changed.
+- A temporary-state live control driver used the installed Claude CLI,
+  directory-marketplace companion, Node 26.13.1 and a real headless hc caller
+  on hc 0.1.21. Enable returned persisted Herdr selection and guidance; resume
+  and compact restored it; explicit Native survived Enable; Disable cleared
+  both preferences. It launched no agents and changed no personal preferences.
+- The same driver with Codex CLI 0.169.0 first hit the original 15-second host
+  listing timeout. An independent listing completed in about 35 seconds; the
+  final listing bound is 45 seconds, with a separate 15-second probe bound.
+  The final Codex run reached installation validation and correctly stayed
+  Native because these companion edits differ from its installed cache.
+  Activation was persisted, Herdr was not, and the reason was explicit.
+  No plugin was refreshed to hide that mismatch. Codex successful selection is
+  covered by fixtures, not a fresh installed-host run of the changed pair.
+
+These are control/CLI checks, not fresh model sessions or proof of model
+compliance. Real approval rejection and subsequent resume were not exercised
+on either host; denied writes are isolated fixtures. The control never retries
+or escalates itself. A host refusal not supplied to the hook remains a
+conversation/handoff constraint. Windows automatic bootstrap is unsupported.
+No mod code changed, so no mod checker or live panel inspection was required.
+
 ## Issue 44: companion selection and bootstrap — 2026-11-15
 
 The companion launcher validates executing-host installation metadata before

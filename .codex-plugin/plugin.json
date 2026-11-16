@@ -1,6 +1,6 @@
 {
   "name": "herdr-zstack",
-  "version": "0.1.1",
+  "version": "0.1.2",
   "description": "Native hc execution companion for Herdr-selected zstack sessions.",
   "author": {
     "name": "Zach Fuller",
