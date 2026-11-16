@@ -216,7 +216,7 @@ test('a selected probe that fails keeps companion provenance and is reported as 
 });
 
 test('release manifests stay synchronized and provenance changes with guidance', t => {
-  assert.equal(provenance(checkout).version, '0.1.1');
+  assert.equal(provenance(checkout).version, '0.1.2');
   const { home, write, plugin } = fixture(t);
   const root = plugin(path.join(home, 'plugin'));
   const before = provenance(root).sha256;
