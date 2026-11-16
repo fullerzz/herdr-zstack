@@ -27,6 +27,12 @@ test('host CLIs refresh local and Git installations', { skip: !codex || !claude 
       for (const file of ['.claude-plugin', '.codex-plugin', 'scripts', 'skills', 'docs', 'records', 'workflows', 'templates']) {
         fs.cpSync(path.join(repo, file), path.join(source, file), { recursive: true });
       }
+      // Fixture versions must remain distinct regardless of the checkout's release version.
+      for (const file of ['.claude-plugin/plugin.json', '.codex-plugin/plugin.json']) {
+        const target = path.join(source, file), data = JSON.parse(fs.readFileSync(target));
+        data.version = '0.1.1';
+        fs.writeFileSync(target, JSON.stringify(data));
+      }
       const env = {
         ...process.env, PATH: `${path.dirname(process.execPath)}${path.delimiter}${process.env.PATH}`,
         CODEX_HOME: config, CLAUDE_CONFIG_DIR: config,

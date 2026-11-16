@@ -14,6 +14,12 @@ passes for the changed hook and new tests; the full shared check reports the
 same unrelated `scripts/test_pr_watcher.py:750` error on both this change and a
 clean archive of base `aef9f55`. No PR-watcher code was changed.
 
+PR review reproduced the optional refresh fixture starting at the checkout's
+new version while asserting the old one. The fixture now explicitly seeds
+`0.1.1` before testing its transition to `0.1.2`, independent of release bumps.
+With both installed host CLIs enabled, `node --test` passes **115 tests with
+zero skips**, including local and Git-source refresh for Claude and Codex.
+
 - Shared Python discovery: **165 passed**, exit 0. Thirteen new tests exercise
   both host names, eligible and absent callers, explicit Native, a Native or
   Disable arriving during preflight, changed activation, failed and malformed
