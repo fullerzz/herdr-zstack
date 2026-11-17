@@ -2,11 +2,11 @@
 
 Use this when Herdr is the selected execution method and the selected workflow is zstack's `how`, `why`, `blast-radius` or `architect`, or `teach` composing `how` and `why`. The installed zstack skill still decides whether coverage is needed, which angles or sources to cover, and how to synthesize. This file says when that coverage runs on hc and how each worker is restricted. Read [operations](operations.md) first. Pass the hc-workflow gate before any launch.
 
-Step numbers refer to installed zstack 0.24.0. Recheck them after an upgrade, as the [inventory](../../../docs/port-inventory.md) describes.
+Step numbers refer to installed zstack 0.28.0. architect has no numbered steps there, so its rows name each part of the skill. Recheck them after an upgrade, as the [inventory](../../../docs/port-inventory.md) describes.
 
 ## Direct by default
 
-Selecting Herdr adds no workers to these skills. Each one runs directly with the coordinator's own tools, including its narrow path, unless the skill itself asks for independent coverage at one of the steps marked **coverage** below. The skill's own condition decides: broad scope for `how`, broad independent sources for `why`, a big or wide change for `blast-radius`, a contested or novel design for `architect`. An explicit user request for coverage also counts. When the condition is unclear, stay direct.
+Selecting Herdr adds no workers to these skills. Each one runs directly with the coordinator's own tools, including its narrow path, unless the skill itself asks for independent coverage at one of the steps marked **coverage** below. The skill's own condition decides: broad scope for `how`, broad independent sources for `why`, a big or wide change for `blast-radius`, a large or contested design for `architect`. An explicit user request for coverage also counts. When the condition is unclear, stay direct.
 
 When a step does ask for coverage, it launches only the members the skill names, 1–3 at a time in one run index. Count native and hc workers together against the host limit. Retry a failed member once, as a fresh assignment with a corrected brief. If hc is unavailable or the retry fails, that member is a gap. Never substitute a native agent silently; use one only when the user selects that fallback for the affected slice, and say so in the report.
 
@@ -40,16 +40,16 @@ After the member stops, check three things. The reviewed checkout's `observeRevi
 | why · 4 | Synthesize; spot-check citations | **Direct.** Read every report and spot-check its citations against the source. | `receipt.evidence` lists each report. |
 | blast-radius · 1–5 | Read; find the safety fact; prove it | **Direct.** The coordinator runs the step 5 proof. A member's claim never replaces it. | None. |
 | blast-radius · 6 | **Coverage:** an arena of independent read-only reviewers for a big or wide change | Launch 2–3 read-only members, each with the same change and grounding. Arena's step 4 judge is a Seat, and an index holds at most three members. With three reviewers, Accept them all, then replace their entries with the Seat in a new `writeRun` sequence ([rolling index](playbooks.md#terms)). With two, the Seat can join the same index. Without one, apply arena's no-judge rule and say so. The coordinator verifies and merges the findings, and reproduces each critical claim directly before reporting it. | One record per reviewer, plus the Seat's. |
-| architect · A | Ground with how and why | Apply the how and why rows above. | As those rows. |
-| architect · B, constrained | One sketch and its constraint | **Direct.** | None. |
-| architect · B, contested | **Coverage:** arena candidates with the runner prompt | Launch 2–3 runners as writers, each with an exclusive sketch directory or its own worktree. The brief carries the runner prompt, the Phase A artifacts and the output path. Runners never start a nested arena. Arena's step 4 judge is a Seat; with three runners, add it as blast-radius · 6 describes. Freeze and Accept each runner before you compare candidates. | `members[].writes` per runner. One `receipt` per candidate. |
-| architect · C, E | Agree; scrap | **Direct.** | None. |
-| architect · D | Implement when authorized | Follow the feature or bug-fix row in the [playbook table](playbooks.md). | As that row. |
+| architect · trace | Trace every touched system; use why when ownership or layering changes | Apply the how and why rows above. | As those rows. |
+| architect · sketch | Two sketches, or one for a constrained mechanical change | **Direct.** | None. |
+| architect · large or contested | **Coverage:** run arena instead of sketching alone | Launch 2–3 arena candidates as writers, each with an exclusive sketch directory or its own worktree. The brief carries the design question, the trace and why findings, and the output path. Candidates never start a nested arena. Arena's step 4 judge is a Seat; with three candidates, add it as blast-radius · 6 describes. Freeze and Accept each candidate before you compare them. | `members[].writes` per candidate. One `receipt` per candidate. |
+| architect · present | Present the choice and its tradeoffs | **Direct.** | None. |
+| architect · implement | Implement only when requested | Follow the feature or bug-fix row in the [playbook table](playbooks.md). | As that row. |
 | teach · 2 | Compose how and why | Apply the how and why rows once. The teaching explanation is direct and does not repeat their fan-out. | As those rows. |
 
 ## Limits
 
 - Live proof covers one read-only Claude investigator under `why`, with the in-run probe, and one Codex probe member under the same overrides. See [validation](../../../docs/validation.md#restriction-proof-under-the-amended-recipes--pass).
-- Exact Git rules for an investigator, a Codex member doing real coverage work, blast-radius reviewers and architect runners have not run live.
+- Exact Git rules for an investigator, a Codex member doing real coverage work, blast-radius reviewers and architect's arena candidates have not run live.
 - A Claude member launched without settings files also loses the user's defaults, such as effort. Pass any needed `--model` or `--effort` explicitly.
 - A delegated source that needs network or MCP is unavailable inside a read-only member. It runs directly or is a gap.

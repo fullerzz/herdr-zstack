@@ -2,6 +2,8 @@
 
 Baseline: installed **zstack 0.22.0**, inspected 2026-10-31 for [issue #8](https://github.com/fullerzz/herdr-zstack/issues/8). This is the M0 plan for the [roadmap](roadmap.md), not an implemented execution adapter.
 
+zstack 0.28.0 deleted `skills/z-mode/playbooks/orchestrate.md`, architect's three references and reflect's four references. architect and reflect are now single files, and reflect starts no reviewer subagents. Their rows below still describe the 0.22.0 baseline, and the coverage check stays pinned to it. The live mappings are in the [playbook table](../skills/hc-workflow/references/playbooks.md) and the [explorer table](../skills/hc-workflow/references/explorers.md).
+
 ## Source and classification
 
 The inspected package is `~/.codex/plugins/cache/zstack-local/zstack/0.22.0/`. Its `.codex-plugin/plugin.json` declares version 0.22.0. Paths and line numbers below are relative to that package. Resolve the real installed package on other machines; do not assume this cache path exists there.
