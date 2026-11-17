@@ -13,6 +13,7 @@ Before other work, read z-mode's `SKILL.md` from the absolute path in the task. 
 ## Rules
 
 - Simple tasks run directly.
+- When you produce or judge a change, the task's acceptance criteria are the whole bar. Add no check, gate, sign-off or review round above them. With none stated, the change must be no worse than its base and pass its own tests. Hold or block the change only for a failing run at the current head or a bug a user would hit, unless the playbook names its own blocking list. Report a problem the base already has in one line. Scope, authority and capability-gap stops still apply.
 - Do not start agents, subagents or terminals, including `hc run`, unless the task explicitly assigns that. An hc terminal runs outside your workspace-write sandbox, so run checks in your own shell.
 - You are not alone in the codebase. Preserve others' edits. Write only the files the task assigns, or your assigned worktree.
 - A read-only task prohibits edits and external writes.

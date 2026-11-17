@@ -1,5 +1,30 @@
 # Validation
 
+## zstack 0.28.0 sync — 2026-11-16
+
+zstack 0.28.0 ([fullerzz/agent-skills#84](https://github.com/fullerzz/agent-skills/pull/84))
+deleted the Orchestrate playbook, made architect and reflect single files, and
+added worker acceptance rules to briefs and both z-agent roles. This sync
+updates the mappings that pointed at the removed text. It bumps the companion
+to `0.1.3`.
+
+- The playbook table drops its 14 Orchestrate rows and names the gap: zstack
+  now sends program-scale work to figure-it-out, which has no hc delta yet.
+  The nine remaining playbooks were read in zstack 0.28.0, and every step the
+  table cites has the same number as in 0.24.0.
+- The explorer table maps the new architect: trace, sketch, present and
+  implement stay direct or reuse existing rows, and a large or contested design
+  runs as arena candidates with a Seat judge. how, why, blast-radius, teach and
+  arena keep their step numbers.
+- Both z-agent templates carry zstack's acceptance rules. The port inventory
+  and roadmap keep their 0.22.0 baseline and note the removals.
+- `node --test` with both installed host CLIs enabled: **115 passed, zero
+  skips**, exit 0. `just check` exit 0. `herdr-app check mods/task-evidence-tabs`
+  passed. `git diff --check` passed.
+- Not exercised live: no Herdr-selected session ran the changed rows. The
+  installed hc templates under `~/.config/herdr-core/templates` stay unchanged
+  until `just install-templates` runs.
+
 ## Issue 45: activation and persisted selection — 2026-11-15
 
 The implementation is coordinated with `hooks/session_start.py` and

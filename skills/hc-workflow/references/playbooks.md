@@ -4,7 +4,7 @@ Use this table when Herdr is the selected execution method and the selected z-mo
 
 Read [operations](operations.md) and the [worker lifecycle](../../../docs/worker-lifecycle.md) first. Pass the hc-workflow gate before any launch.
 
-Step numbers refer to installed zstack 0.24.0, checked against 0.23.0. Both versions number these steps the same way. Recheck the steps after an upgrade, as the [inventory](../../../docs/port-inventory.md) describes.
+Step numbers refer to installed zstack 0.28.0, checked against 0.24.0. Both versions number these steps the same way. Recheck the steps after an upgrade, as the [inventory](../../../docs/port-inventory.md) describes.
 
 ## Terms
 
@@ -24,20 +24,6 @@ A run index holds 1–3 live members, Seats included. While owners need a verifi
 
 | Playbook · step | zstack point | hc operation | Record fields |
 |---|---|---|---|
-| orchestrate · line 4 | Spawn workers through the selected method | Launch each unit owner, one member per unit, with an exclusive worktree and branch. Start with one pilot unit and fan out only after it reaches merge-ready. | Run index `members[]`. Notes: unit, owner `taskId`, terminal address. Keep live status apart from `receipt`. |
-| orchestrate · line 4 | Native task tracker and notes file | **Direct.** The notes file stays the program ledger. hc state is evidence in it, not a substitute. | Notes: goal, authority, directives, and per unit the owner, PR, head and verdict. |
-| orchestrate · line 4 | Watch PRs with native subscriptions | **Direct**, through `gh pr view` / `gh pr checks` or host PR events. A long-running watcher is a Process (M5). | Notes: PR head and CI state at each verdict. |
-| orchestrate · line 4 | Never relay messages between agents | Never `hc send` one member's report to another. Paste an upstream report into the dependent member's brief at launch. | `brief` holds the pasted report. |
-| orchestrate · line 7 | Only the owner writes, pushes or retargets its branch | The brief grants the owner its branch and only the publication actions the user covered. The coordinator never edits the owner's worktree. | `owner`, `scope`, `members[].writes`. |
-| orchestrate · line 8 | Fresh worker per task, upstream reports pasted, exclusive worktree | Launch a new member for each task and fix round. Never `hc send` new work to a finished member. | A new `taskId` per assignment. The old record keeps its `receipt`. |
-| orchestrate · line 9 | Nest only when the host supports it | **Gap.** Briefs ban `hc run`, and nested coordinators are unproven on hc. Stay at one coordinator level and use the rolling index above. | None. |
-| orchestrate · line 10 | Reuse only for built state | `hc send <t>` to the bound member, only after `reconcile` reports it bound and only for agent-held state. Never message a worker to check on it; use `hc get` / `hc read`. | `worker` binding re-reconciled before the send. Notes record the reason. |
-| orchestrate · line 11 | Other-family verifier passes at the current head | When the owner reports its pushed head, freeze it (Accept step 1) and run the Head check. Then run a Seat, read-only with exact check rules, at that head. Its report is evidence. Finish Accept with the seat report among the coordinator's evidence. Without a usable seat, stop at merge-ready and report the gap. | Seat record and report path. Owner `receipt.revision` from the Head check. |
-| orchestrate · line 11 | Owner merges per Shipping, when authorized | Under explicit merge authority, launch a Successor whose only task is Shipping's merge, pinned to `receipt.revision.commit` (on GitHub, `gh pr merge --match-head-commit`). A rebase or retarget moves the head and returns the unit to the verifier row. Confirm the merge with `gh pr view`. Without merge authority, the unit stops at merge-ready. | Successor record. Notes: merge-ready head, verdict, merge authority, merge result. |
-| orchestrate · lines 15–16 | Brief names done evidence; read the diff | Accept. Read the diff in the owner's worktree, not only the report. | `receipt.evidence` lists coordinator checks. |
-| orchestrate · line 18 | Account for every spawned worker | `hc ls --all --label run=<run>`, then `hc get` for each bound address. Mark each one done, replaced or absorbed. | Every `taskId` the run used, current or replaced in the index, has an outcome in notes. |
-| orchestrate · line 19 | Judge by pushes, stop, retry once fresh | Judge with `gh`, not hc status. Stop the stalled member, then Launch a fresh one with a corrected brief. A late report from a stopped member is checked against the PR's current head. | Old `receipt.decision: incomplete`. New `taskId`, new `launchAttempted`. |
-| orchestrate · line 21 | Reconcile before completion or pause | Collect, then Stop or pause-safely below. | Final `activity`, notes. |
 | autopilot-full · 2 | Owners with exclusive worktrees; fresh owner per item and fix round | Launch, one member per item, in the rolling index above. A retained terminal never implies reuse of its conversation. | `members[]`, a new `taskId` per item or round. |
 | autopilot-full · 3 | Independent reviewers at exact heads; blocking defects to a fresh owner | Reviewer: a read-only member or, when another family is required, a Seat. Accept the owner with a Head check at the reviewed head. A blocking defect gets a Successor whose brief carries the prior report and paths. | Reviewer report path. Owner `receipt.revision` at that head. |
 | autopilot-full · 4–5 | Publish, re-check heads, merge only if authorized | **Direct** by the coordinator, or by a Successor when the user's authority covers it. Before acting, repeat the Head check's later half against the live head. | `receipt.revision` against a fresh `observeRevision` and the live `headRefOid`. |
@@ -64,9 +50,8 @@ A run index holds 1–3 live members, Seats included. While owners need a verifi
 
 ## Coverage
 
-Each delegating point in the inventory's ten playbook rows appears above:
+Each delegating point in the inventory's playbook rows appears above, except orchestrate, which zstack 0.28.0 deleted:
 
-- orchestrate: line 4's dispatch and PR watch; lines 8–11's owners, sub-coordinators, reuse and verifiers; lines 19–21's replace and reconcile.
 - autopilot-full: steps 2, 3 and 6. Autopilot-stack: inherited owners plus step 3's release.
 - autonomous-run: steps 2 and 4, plus its stop.
 - bug-fix: step 3. Feature: step 3. Refactoring: step 4.
@@ -76,6 +61,7 @@ Steps not listed are execution-neutral and stay direct.
 
 ## Limits
 
+- zstack 0.28.0 sends program-scale work to figure-it-out instead of orchestrate. figure-it-out has no hc delta yet.
 - Nested sub-coordinators and more than three live members per index are unavailable. The rolling index keeps at most three in flight.
 - Processes, including a PR watcher, follow [supporting processes](processes.md). Live proof covers the local macOS host only. Remote, Linux and host-shutdown recovery are untested.
 - Writing seats are unproven live. A verifier that must write repro files is a coverage gap until that is proven.

@@ -48,9 +48,9 @@ When the selected workflow is zstack's `swarm`, also apply the
 [swarm addendum](../swarm/SKILL.md) for fan-out, drain and race cancellation.
 It supplements the installed zstack skill; it does not replace it or add workers.
 
-When the selected z-mode playbook is orchestrate, autopilot-full,
-autopilot-stack, autonomous-run, bug-fix, feature, refactoring, pause-safely,
-session-pickup or worktree-cleanup, use the [playbook table](references/playbooks.md)
+When the selected z-mode playbook is autopilot-full, autopilot-stack,
+autonomous-run, bug-fix, feature, refactoring, pause-safely, session-pickup or
+worktree-cleanup, use the [playbook table](references/playbooks.md)
 to map each delegation, pause, pickup and cleanup step to hc operations and
 record fields. Steps it marks direct stay direct.
 
