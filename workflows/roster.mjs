@@ -111,6 +111,10 @@ export async function observeMember(run, taskId, host, { exec } = {}) {
   const { commit, worktreeDigest, reachable, ...facts } = host ?? {};
   const base = { ...facts, machine, checkout: member.checkout };
   if (!host) return { ...base, reachable: false, error: 'host query failed' };
+  // A host that reports another machine or checkout is binding evidence, not a
+  // field to fill in: keep it so reconcile reports unbound, and observe no revision.
+  const conflicts = ['machine', 'checkout'].filter(key => facts[key] !== undefined && facts[key] !== base[key]);
+  if (conflicts.length) return { ...facts, reachable: true, error: `host reports a different ${conflicts.join(' and ')}` };
   try {
     const revision = isRemote(member, run)
       ? await observeRemoteRevision(machine, member.checkout, exec ? { exec } : {})

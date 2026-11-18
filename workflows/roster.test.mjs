@@ -458,3 +458,23 @@ test('a base-36 remote terminal ID counts as qualified', async () => {
     assert.equal(updated.receipt.decision, 'accepted');
   } finally { await rm(base, { recursive: true, force: true }); }
 });
+
+test('host evidence for another checkout or machine is kept, so the member is unbound', async () => {
+  const { reconcile } = await import('./worker-lifecycle.mjs');
+  const { base, run, worker } = await remoteRun();
+  try {
+    const good = await observeMember(run, 'far', { worker, state: 'finished' }, { exec: fixtureExec });
+    for (const conflict of [{ checkout: join(base, 'elsewhere') }, { machine: 'remote-2' }]) {
+      let execs = 0;
+      const observed = await observeMember(run, 'far', { worker, state: 'finished', ...conflict }, { exec: async (...args) => { execs++; return fixtureExec(...args); } });
+      const [[key, value]] = Object.entries(conflict);
+      assert.equal(observed[key], value, `the host's ${key} is not overwritten`);
+      assert.equal(observed.commit, undefined, 'no revision for a conflicting binding');
+      assert.equal(execs, 0, 'nothing is observed at the expected path');
+      const saved = JSON.parse(await readFile(recordPath(run.members[0], run)));
+      assert.equal(reconcile({ ...saved, revision: good }, observed).state, 'unbound');
+      await assert.rejects(recordMemberAcceptance(run, 'far', remoteInputs(observed, good)), /observed revision was not observed on remote-1/);
+    }
+    assert.equal(JSON.parse(await readFile(recordPath(run.members[0], run))).receipt, null);
+  } finally { await rm(base, { recursive: true, force: true }); }
+});
