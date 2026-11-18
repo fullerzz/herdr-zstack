@@ -1940,3 +1940,62 @@ Limits: no worker reached `blocked` or `error` during its task, and none went
 missing a report. Those outcomes are covered by fixtures and guidance, not by
 live runs. The Codex host's tool limit was not measured. A finished terminal
 that has not been removed was not tested as a name holder.
+
+## 2026-11-17 — live remote worker on buntu26 (#19)
+
+Coordinator: macOS, hc and core 0.1.21. Remote: `buntu26`, Linux x86_64,
+hc 0.1.18, Claude Code 2.1.322, no `node`. The user authorized a throwaway Git
+repository in `/tmp/hz19-proof` and one Claude worker there. The run index
+`p19` held one member with `"machine": "buntu26"`. Its record and evidence
+stayed in the coordinator's checkout.
+
+- Pre-check: `hc exec --on buntu26 -- git -C /tmp/hz19-proof rev-parse --show-prefix HEAD`
+  printed an empty prefix and the fixture commit.
+- Launch: `hc run --on buntu26 --bg --json …` returned the qualified address
+  `buntu26/t1h` with parent `t16`. The record bound that address and the
+  occupant's PID and start time, read through `hc exec --on buntu26 -- ps`.
+  The installed buntu26 templates predate #50, so the worker was a direct
+  `claude --permission-mode auto` launch with the task in argv.
+- Readiness: Claude Code showed its folder-trust dialog for the new folder.
+  It went to the user, who approved trusting that folder. The task in argv then
+  ran.
+- Completion and collection: the worker appended one line and wrote its report
+  in the remote checkout. `hc file read --on buntu26 <report>` copied it into
+  the coordinator's evidence. The worker was told not to `hc send`, so remote
+  report delivery was not tested.
+- Freeze: `hc kill buntu26/t1h`, then `hc get` showed `finished` and `reason: killed`.
+- Observation: `observeMember` ran the remote observer through
+  `hc exec --json --on buntu26` before and after the check, with only `sh` and
+  `git` on the remote. It gave the same commit and
+  `sha256:a7d1d9a8…304fb881` both times. The check was
+  `hc exec --on buntu26 --cwd /tmp/hz19-proof -- git … diff --no-ext-diff`,
+  which exited 0 and showed only `+beta`.
+- Acceptance: the first `recordMemberAcceptance` refused `buntu26/t1h` as
+  unqualified. Its check allowed only decimal IDs, but hc IDs are base 36. The
+  check now accepts `t[0-9a-z]+`, and a fixture pins `remote-1/t1h`. The retry
+  wrote an `accepted` receipt. `acceptanceStatus` gave `accepted` against the
+  remote observation and `unverified` against the same revision labelled with
+  the coordinator's machine. A fresh remote observation after acceptance still
+  gave `accepted`.
+- Unreachable: `observeMember` for a member on `no-such-machine` got hc's
+  `machine_unknown` and returned `reachable: false` with no revision.
+  `reconcile` gave `unavailable` and no resend. No real machine was
+  disconnected.
+- Cleanup: `buntu26/t1h` was removed. The coordinator's command ran that removal
+  in the same call as the first, refused acceptance. The retry used the
+  `finished` observation taken right after the freeze, so the receipt rests on
+  that observation and not on a fresh `hc get`.
+
+The coordinator installed, upgraded and logged in to nothing on buntu26. But
+launching Claude Code there let its own background updater run, and it showed
+"Update installed" after the task. A remote launch can therefore change the
+remote CLI version. The worker's Stop hook failed with
+`node: not found`, which comes from a hook in that machine's Claude
+configuration. Neither affected the task.
+
+Limits: one remote worker on one Linux machine. Remote report delivery with
+`hc send`, remote templates, remote recovery after a lost worker or core, and
+a configured machine that hangs or drops mid-query were not exercised: the
+fail-closed check used an unknown name, which hc rejects at once. Mode bits come from `ls -ld` on the
+remote, so the same commit can digest differently on two machines. Only
+observations from the owning machine are compared.

@@ -64,45 +64,66 @@ export async function writeRun(path, run, { writer, expectedSequence = 0 }) {
     identity: ['runId', 'coordinator', 'machine', 'checkout'] });
 }
 
+// Git's revision-input commands, run in the checkout. A remote observer runs the same ones.
+export const REVISION_PATHS = ['--', '.', ':(exclude).herdr-tasks'];
+const S_IFMT = 0o170000, S_IFDIR = 0o040000, S_IFREG = 0o100000, S_IFLNK = 0o120000;
+
+/**
+ * The `raw-worktree-v1` digest over git's raw outputs and each path's lstat
+ * mode and bytes. Local and remote observers share it, so equal inputs give
+ * equal digests.
+ * @param {{ commit: string, staged: Buffer, tree: Buffer, others: Buffer,
+ *   entry: (name: string) => Promise<null | { mode: number, bytes: () => Promise<Buffer> }> }} inputs
+ *   `entry` returns null for a missing path; `bytes` gives file content or the symlink target.
+ */
+export async function digestRevision({ commit, staged, tree, others, entry }) {
+  const { createHash } = await import('node:crypto');
+  const names = new Set(others.toString().split('\0').filter(Boolean));
+  const submodules = new Set();
+  for (const line of `${tree}\0${staged}`.split('\0').filter(Boolean)) {
+    const name = line.slice(line.indexOf('\t') + 1);
+    if (name === '.herdr-tasks' || name.startsWith('.herdr-tasks/')) continue;
+    names.add(name);
+    if (line.startsWith('160000 ')) submodules.add(name);
+  }
+  const hash = createHash('sha256');
+  const part = value => { hash.update(String(value.length)); hash.update(':'); hash.update(value); };
+  part(Buffer.from('raw-worktree-v1')); part(staged);
+  for (const name of [...names].sort()) {
+    part(Buffer.from(name));
+    const found = await entry(name);
+    if (!found) { part(Buffer.from('missing')); continue; }
+    const type = found.mode & S_IFMT;
+    if (type === S_IFDIR && submodules.has(name)) { part(Buffer.from('submodule')); continue; }
+    if (type !== S_IFREG && type !== S_IFLNK) throw new Error(`Unsupported revision input: ${name}`);
+    part(Buffer.from(String(found.mode)));
+    part(await found.bytes());
+  }
+  return { commit, worktreeDigest: `sha256:${hash.digest('hex')}` };
+}
+
 // Freeze task writers before observing; git does not provide an atomic worktree snapshot.
 export async function observeRevision(checkout) {
   const { execFile } = await import('node:child_process');
   const { promisify } = await import('node:util');
-  const { createHash } = await import('node:crypto');
   const { lstat, readlink, realpath } = await import('node:fs/promises');
   const { join } = await import('node:path');
   const run = promisify(execFile);
   const git = async args => (await run('git', ['-C', checkout, ...args], { encoding: 'buffer', maxBuffer: 64 * 1024 * 1024 })).stdout;
   const root = (await git(['rev-parse', '--show-toplevel'])).toString().trim();
   if (await realpath(checkout) !== await realpath(root)) throw new Error('checkout must be the repository root');
-  const paths = ['--', '.', ':(exclude).herdr-tasks'];
   const commit = (await git(['rev-parse', 'HEAD'])).toString().trim();
-  const staged = await git(['ls-files', '--stage', '-z', ...paths]);
+  const staged = await git(['ls-files', '--stage', '-z', ...REVISION_PATHS]);
   const tree = await git(['ls-tree', '-rz', 'HEAD']);
-  const names = new Set((await git(['ls-files', '--others', '--exclude-standard', '-z', ...paths])).toString().split('\0').filter(Boolean));
-  const submodules = new Set();
-  for (const entry of `${tree}\0${staged}`.split('\0').filter(Boolean)) {
-    const name = entry.slice(entry.indexOf('\t') + 1);
-    if (name === '.herdr-tasks' || name.startsWith('.herdr-tasks/')) continue;
-    names.add(name);
-    if (entry.startsWith('160000 ')) submodules.add(name);
-  }
-  const hash = createHash('sha256');
-  const part = value => { hash.update(String(value.length)); hash.update(':'); hash.update(value); };
-  part(Buffer.from('raw-worktree-v1')); part(staged);
-  for (const name of [...names].sort()) {
+  const others = await git(['ls-files', '--others', '--exclude-standard', '-z', ...REVISION_PATHS]);
+  return digestRevision({ commit, staged, tree, others, entry: async name => {
     const path = join(checkout, name);
-    part(Buffer.from(name));
     let stat;
     try { stat = await lstat(path); }
     catch (error) {
       if (!['ENOENT', 'ENOTDIR'].includes(error.code)) throw error;
-      part(Buffer.from('missing')); continue;
+      return null;
     }
-    if (stat.isDirectory() && submodules.has(name)) { part(Buffer.from('submodule')); continue; }
-    if (!stat.isFile() && !stat.isSymbolicLink()) throw new Error(`Unsupported revision input: ${name}`);
-    part(Buffer.from(String(stat.mode)));
-    part(stat.isSymbolicLink() ? Buffer.from(await readlink(path)) : await readFile(path));
-  }
-  return { commit, worktreeDigest: `sha256:${hash.digest('hex')}` };
+    return { mode: stat.mode, bytes: () => stat.isSymbolicLink() ? readlink(path, { encoding: 'buffer' }) : readFile(path) };
+  } });
 }
