@@ -45,7 +45,7 @@ Templates use each CLI's default model and effort. Record the requested provider
 When the user asks for a non-default model, use one of these routes:
 
 - The user reinstalls the templates with `--claude-model` or `--codex-model`, as [installation](../../../docs/installation.md#hc-role-templates) describes. This changes every later launch of those templates, so do it only on their explicit authorization.
-- A direct launch that keeps the template whole. Copy the template's `command` from `hc templates --json` and add the model flag at the end: `--model <model>` for Claude, after the last `--allowedTools` rule, or `-m <model>` for Codex. Copy the template body from the installed `~/.config/herdr-core/templates/<template>.md`, without its frontmatter, to the top of the brief. Launch with the same task as above.
+- A direct launch that keeps the template whole. Copy the template's `command` from `hc templates --json`. If it already has a model option from an installed override (`--model` for Claude, `-m` or `--model` for Codex), replace that option's value. Otherwise add the option at the end: `--model <model>` for Claude, after the last `--allowedTools` rule, or `-m <model>` for Codex. Never pass the option twice: Codex 0.169.0 refuses with `the argument '--model <MODEL>' cannot be used multiple times`. Keep the rest of the command, including any effort setting, unchanged. Copy the template body from the installed `~/.config/herdr-core/templates/<template>.md`, without its frontmatter, to the top of the brief. Launch with the same task as above.
 
 Never change the model by editing personal configuration, such as Claude Code settings, Codex `config.toml` or an installed template file.
 
@@ -59,7 +59,7 @@ Launch a CLI directly only in these cases:
 - A restricted review seat, such as an other-provider judge or adversary. Use the recipes in [seats](seats.md), never a template. Seats keep their own permission modes from seats, such as `dontAsk` for a read-only Claude seat and `--ask-for-approval never` without `--approve-for-me` for Codex.
 - A requested non-default model, through the template copy above.
 
-A direct worker launch carries the templates' safeguards itself:
+A direct engineering worker launch carries the templates' safeguards itself. Seats and read-only members use their own recipes instead, and the auto and approval flags below do not apply to them:
 
 - Launch the CLI directly, not through `env` or a shell wrapper. hc must see the agent to report its status and first-message delivery.
 - Claude's `--allowedTools` takes a variable number of values. Put another option after the last rule and before the task. Otherwise the task becomes a rule and the agent starts with no task. hc 0.1.16 with Claude Code 2.1.316 showed this.
@@ -72,7 +72,7 @@ A direct worker launch carries the templates' safeguards itself:
 Check and record each stage separately. A passing stage never stands in for the next one.
 
 1. **Launch admission.** `hc run` returned JSON with the terminal address. Save the full response. A timeout, nonzero exit or transport error is ambiguous. Look up the unique name with `hc get <run>-<task>` before you decide whether a process exists. Never launch again to find out.
-2. **Readiness.** The agent waits at its prompt in the expected mode. Read the screen with `hc read <t> --lines 60`. A Claude worker shows `auto mode on`, and a Codex worker shows `Approve for me` in its status line. Any dialog or other mode is a startup blocker, as described below.
+2. **Readiness.** The agent waits at its prompt in the mode its launch recipe sets. Read the screen with `hc read <t> --lines 60`. An engineering worker, from a template or a direct launch, shows `auto mode on` for Claude and `Approve for me` in the Codex status line. A seat or read-only member keeps the mode its recipe in [seats](seats.md) or [explorers](explorers.md) sets, such as `dontAsk` for a read-only Claude seat, `acceptEdits` for a writing Claude seat, or `--ask-for-approval never` for Codex. Never add auto mode or `--approve-for-me` to a restricted launch to pass this check. Any dialog, or a mode other than the recipe's, is a startup blocker, as described below.
 3. **First-message delivery.** Check `first_message.sent` in the launch response, or later with `hc get <t>`. When it is true, hc typed the task: read the screen to confirm it arrived once. When it is false, the task was not sent: its `reason` and the screen say why. An absent receipt, a timeout or a transport error means delivery is unknown. In every case, read the screen before any input. Send the task at most once, only after the screen shows the agent ready and no copy of the task. For a template launch, an unsent first message also lost the role: the one send carries the installed template's body, without its frontmatter, followed by the task. `hc send --if idle` refuses to type into a busy or blocked agent. Never resend after a failed or unknown send without reading first.
 4. **Completion** and 5. **reporting** follow in §4.
 

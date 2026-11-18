@@ -65,6 +65,22 @@ test('ordinary launches start from an installed role template with explicit rout
   assert.match(read('docs/installation.md'), /Coordinators\nlaunch ordinary workers from these templates by default/);
 });
 
+test('readiness follows the launch recipe, so restricted seats keep their modes', () => {
+  const readiness = launch.slice(launch.indexOf('**Readiness.**'), launch.indexOf('3. **First-message delivery.**'));
+  assert.match(readiness, /in the mode its launch recipe sets/);
+  for (const mode of ['`dontAsk`', '`acceptEdits`', '`--ask-for-approval never`']) assert.ok(readiness.includes(mode), mode);
+  assert.match(readiness, /Never add auto mode or `--approve-for-me` to a restricted launch/);
+  assert.match(launch, /Seats and read-only members use their own recipes instead/);
+  // These are the modes readiness must accept; they must stay in the recipes it names.
+  const seats = read('skills/hc-workflow/references/seats.md');
+  for (const flag of ['--permission-mode dontAsk', '--permission-mode acceptEdits', '--ask-for-approval never']) assert.ok(seats.includes(flag), flag);
+});
+
+test('a per-run model override replaces an installed model option', () => {
+  assert.match(launch, /If it already has a model option from an installed override .*, replace that option's value\. Otherwise add the option at the end/);
+  assert.match(launch, /Never pass the option twice/);
+});
+
 test('Codex launches keep daemon isolation and compatible approval flags', () => {
   const docs = [...shipped, 'docs/installation.md', 'docs/worker-lifecycle.md'];
   const launches = docs.flatMap(file => [
