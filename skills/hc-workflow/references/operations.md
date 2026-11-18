@@ -66,9 +66,11 @@ Record exactly one outcome per member, from its own evidence:
 | Startup failure | The launch failed or the agent never started (§3) | Handle as §3 describes; no automatic relaunch |
 | Delivery missing | `first_message.sent` false, absent or unknown, and the screen does not show the task once (§3) | Handle as §3 describes; no automatic resend |
 | Blocked or error | `blocked` or `error` status, a permission prompt, or a screen showing a stall | Read the screen; ask the user about permission decisions |
-| Report missing | Idle, done or exited, but no report message or no report file | Incomplete; read the screen and keep its evidence |
-| Report complete | The tagged report arrived and the report file it names exists | Read the file; it is a claim, not acceptance |
+| Report missing | Idle, done or exited, but no report file, or no report message from a member that can send one | Incomplete; read the screen and keep its evidence |
+| Report complete | The tagged report arrived and the report file it names exists. A member with no route to the core, such as a restricted Codex seat or read-only member, sends no message: its status is `done` or `idle`, the screen shows it finished, and its assigned report file exists | Read the file; it is a claim, not acceptance |
 | Verified | The coordinator confirmed the claimed outcome with the task's own acceptance check (§5) | Accept this member alone |
+
+A restricted Codex seat or read-only member never counts as `Report missing` only because no message arrived. Its sandbox refuses the core socket, as [seats](seats.md) §1 describes. Never widen its sandbox so that it can send.
 
 Only a verified member can be accepted. Every other outcome is incomplete or rejected, with its evidence. One member's success never stands in for another's.
 

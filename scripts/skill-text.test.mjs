@@ -88,6 +88,20 @@ test('worker outcomes are distinct and only verification accepts', () => {
   assert.match(operations, /Only a verified member can be accepted/);
   const lifecycle = read('docs/worker-lifecycle.md');
   for (const outcome of outcomes) assert.match(lifecycle, new RegExp(outcome, 'i'), `lifecycle: ${outcome}`);
+  // Each outcome is one table row; a duplicate row would make the table ambiguous.
+  for (const outcome of outcomes) assert.equal(operations.match(new RegExp(`^\\| ${outcome} \\|`, 'gm')).length, 1, `one row: ${outcome}`);
+});
+
+test('a member that cannot reach the core completes by status and report file', () => {
+  const operations = read('skills/hc-workflow/references/operations.md');
+  const row = name => operations.match(new RegExp(`^\\| ${name} \\|.*$`, 'm'))[0];
+  // A missing message alone is "Report missing" only for a member that can send one.
+  assert.match(row('Report missing'), /no report file, or no report message from a member that can send one/);
+  assert.match(row('Report complete'), /no route to the core.*sends no message: its status is `done` or `idle`, the screen shows it finished, and its assigned report file exists/);
+  assert.match(operations, /never counts as `Report missing` only because no message arrived/);
+  assert.match(operations, /Never widen its sandbox so that it can send/);
+  // The seat recipe that this route depends on: Codex seats write the report and stop.
+  assert.match(read('skills/hc-workflow/references/seats.md'), /A Codex seat writes the report and stops; it has no route to the core/);
 });
 
 test('cleanup and retry act on one owned address at a time', () => {
