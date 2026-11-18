@@ -108,6 +108,21 @@ test('no worker or non-coordinator can accept, and mismatched records are refuse
   } finally { await rm(checkout, { recursive: true, force: true }); }
 });
 
+test('an aggregate drain cannot accept a member whose own result failed', async () => {
+  const { checkout, run, observedByTask } = await scratchRun();
+  try {
+    // The shape `hc wait --children all --json` returned on hc 0.1.21: the drain has no exit code of its own.
+    const drain = { reason: 'children', exit_code: null, children: [{ terminal: 't1', exit_code: 0 }, { terminal: 't2', exit_code: 3 }] };
+    const aggregate = [{ command: 'hc wait --children all', exitCode: drain.exit_code, evidence: 'drain.json' }];
+    await assert.rejects(recordMemberAcceptance(run, 'a', { ...inputs(observedByTask), checks: aggregate }), /checks/);
+    const own = Object.fromEntries(drain.children.map((child, i) => [run.members[i].taskId,
+      [{ command: 'node check.mjs', exitCode: child.exit_code, evidence: `${child.terminal}.log` }]]));
+    await assert.rejects(recordMemberAcceptance(run, 'b', { ...inputs(observedByTask), checks: own.b }), /checks/);
+    assert.equal((await recordMemberAcceptance(run, 'a', { ...inputs(observedByTask), checks: own.a })).receipt.decision, 'accepted');
+    assert.equal(JSON.parse(await readFile(recordPath(run.members[1]))).receipt, null, 'one member never stands in for another');
+  } finally { await rm(checkout, { recursive: true, force: true }); }
+});
+
 test('run index writes are coordinator-only and sequence checked', async () => {
   const { checkout, run } = await scratchRun({ persist: false });
   try {
