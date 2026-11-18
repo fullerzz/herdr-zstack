@@ -434,3 +434,12 @@ test('a remote worker address must be qualified with its machine', async () => {
     } finally { await rm(base, { recursive: true, force: true }); }
   }
 });
+
+test('a base-36 remote terminal ID counts as qualified', async () => {
+  const { base, run, worker } = await remoteRun({ terminal: 'remote-1/t1h' });
+  try {
+    const observed = await observeMember(run, 'far', { worker, state: 'finished' }, { exec: fixtureExec });
+    const updated = await recordMemberAcceptance(run, 'far', remoteInputs(observed));
+    assert.equal(updated.receipt.decision, 'accepted');
+  } finally { await rm(base, { recursive: true, force: true }); }
+});

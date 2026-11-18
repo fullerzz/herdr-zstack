@@ -93,7 +93,8 @@ const sameCheckout = (run, left, right) => memberMachine(left, run) === memberMa
   (isRemote(left, run) ? left.checkout === right.checkout : scopePath(left.checkout) === scopePath(right.checkout));
 const qualified = (terminal, machine) => {
   const [host, id, ...rest] = String(terminal).split('/');
-  return host === machine && /^t\d+$/.test(id ?? '') && !rest.length;
+  // hc terminal IDs are base 36 (t7, t1h, t1fz).
+  return host === machine && /^t[0-9a-z]+$/.test(id ?? '') && !rest.length;
 };
 
 /**
