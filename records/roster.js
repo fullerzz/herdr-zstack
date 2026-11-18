@@ -48,10 +48,10 @@ export const isRemote = (member, run) => memberMachine(member, run) !== run.mach
 // A remote member's record and evidence stay with the coordinator, beside the index.
 /**
  * @param {Pick<RunMember, "checkout" | "taskId" | "machine">} member
- * @param {Pick<RunIndex, "checkout" | "machine">} run
+ * @param {Pick<RunIndex, "checkout" | "machine">} [run] Without it, the member is local.
  */
 export const recordPath = (member, run) =>
-  under(isRemote(member, run) ? run.checkout : member.checkout, ".herdr-tasks", member.taskId, "task.json");
+  under(run && isRemote(member, run) ? run.checkout : member.checkout, ".herdr-tasks", member.taskId, "task.json");
 /** @param {Pick<RunIndex, "checkout" | "runId">} run */
 export const runPath = run => under(run.checkout, ".herdr-tasks", run.runId, "run.json");
 

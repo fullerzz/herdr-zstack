@@ -10,6 +10,7 @@ test("run index paths and structure match the coordinator-side index", () => {
   assert.deepEqual(validateRunShape(run), []);
   assert.equal(runPath(run), "/work/pilot/.herdr-tasks/roster-pilot/run.json");
   assert.equal(recordPath(run.members[1], run), "/work/pilot/.herdr-tasks/pilot-b/task.json");
+  assert.equal(recordPath(run.members[1]), "/work/pilot/.herdr-tasks/pilot-b/task.json", "a member without its run is local");
   assert.match(validateRunShape({ ...run, members: [] }).join(), /1-3/);
   assert.match(validateRunShape({ ...run, members: [...run.members, ...run.members] }).join(), /1-3/);
   assert.match(validateRunShape({ ...run, schemaVersion: 2 }).join(), /schemaVersion/);
