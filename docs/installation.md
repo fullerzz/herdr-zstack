@@ -12,8 +12,8 @@ layouts, keybindings, and core settings remain untouched; use the layout recipes
 below to opt into presentation changes. This command does not pull Git changes.
 
 Requires Node 24 or newer; there are no npm dependencies. Compatibility follows
-[the execution contract](execution-contract.md): inspected hc 0.1.15,
-herdr-app 0.1.10, and zstack 0.22.0. Installation does not enable either mode,
+[the execution contract](execution-contract.md): validated hc 0.1.21 and
+zstack 0.28.0, and inspected herdr-app 0.1.10. Installation does not enable either mode,
 dispatch workers, register skills, change layouts/keybindings, or update itself.
 
 Use an explicit absolute **app configuration directory**, normally
@@ -75,7 +75,10 @@ has stopped; review any temporary state before moving it aside.
 
 ## hc role templates
 
-`templates/` ships zstack's two roles as hc templates, one per CLI:
+`templates/` ships zstack's two roles as hc templates, one per CLI. Coordinators
+launch ordinary workers from these templates by default;
+[operations §3](../skills/hc-workflow/references/operations.md#3-launch) lists the
+direct-launch exceptions, such as restricted review seats.
 
 | Template | Command |
 |---|---|
@@ -94,7 +97,8 @@ shell command or at a read outside its checkout. Claude Code's classifier
 reviews those actions instead, and deny rules still apply. One prompt remains:
 until you have answered it once on a host, Claude Code asks before the first
 read outside the working directories, and both templates read z-mode's
-`SKILL.md` first. Answer it yourself in the worker's terminal. Auto mode is not a
+`SKILL.md` first. The coordinator reports that prompt to you and never answers
+it; answer it yourself in the worker's terminal. Auto mode is not a
 sandbox and does not enforce the brief's write scope. If auto mode is unavailable
 to the session, Claude Code starts in Manual and the worker prompts again.
 
@@ -102,7 +106,8 @@ Each body carries the role, the instruction to read z-mode's `SKILL.md` first,
 the no-delegation rule and the report route. The task given to `hc run` must supply
 the absolute z-mode path, the coordinator's literal address, the task ID and, for
 `z-agent`, the report path. `comment-sicko` writes no file: it leaves its report on
-screen for `hc read` and sends one status line.
+screen and sends one status line. The coordinator saves that screen with `hc read`
+into its own evidence file.
 
 Both Codex templates start with `--approve-for-me`, Codex's automatic review
 mode. It keeps the workspace-write sandbox and sends each approval request to
@@ -111,7 +116,9 @@ flag cannot be combined with `--sandbox` or `--ask-for-approval`. Codex
 0.166.0's `read-only` sandbox blocks `hc send`
 (`cannot start core: Operation not permitted`), so no template uses it. Neither
 `comment-sicko` variant enforces read-only behavior with a sandbox; the role
-forbids writes and the coordinator checks the checkout afterwards.
+forbids writes and the coordinator checks the checkout afterwards. Codex may
+also stop a new worker at a folder-trust or hook-trust dialog before its task. The
+coordinator reports the dialog to you and does not answer it.
 
 Install them into the herdr-core configuration directory, normally
 `$HOME/.config/herdr-core`, with `--target templates`. The same preview, apply,
@@ -130,7 +137,9 @@ pass it explicitly at install or update time:
 `--codex-model` and `--codex-effort`. They render as `--model`/`--effort` for
 Claude and `-m`/`-c model_reasoning_effort=` for Codex. Codex effort values are
 checked only for shape. Pass the same overrides again on every update; an update
-without them restores the defaults.
+without them restores the defaults. An override changes every later launch of
+those templates. For one run that needs another model, operations §3 describes a
+direct launch that keeps the template's command and body.
 
 Ownership lives in `.herdr-zstack-templates.json` beside `templates/`, separate
 from the mod state, so rolling back one target never reverts the other. Only

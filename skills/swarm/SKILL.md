@@ -49,7 +49,7 @@ exclusive output, checks and report path, and requests PASS / ISSUES / BLOCKED
 with evidence. A worker's own `HC_TERMINAL_ID` is not its report recipient.
 Use each CLI's default model unless the user requests an override.
 
-For coverage, drain the roster with bounded waits:
+For coverage, drain the roster with bounded waits, one per tool call:
 
 ```sh
 hc wait --children all --timeout 30
@@ -57,11 +57,16 @@ hc wait --children all --timeout 30
 
 A message can end the wait before the drain completes. Match its tagged sender
 to a bound member, collect the actual report, and wait again for outstanding
-members. A timeout is a check-in; blocked/error needs screen inspection and any
-required user decision. Do not force input past it. `all` covers the parent's
-children, which may include unrelated work: never signal those children; use
-bounded per-address waits for this run if unrelated children prevent completion.
-Done/idle is not acceptance, and a missing report or required slice is BLOCKED.
+members. A timeout is a check-in, not completion or permission to relaunch;
+blocked/error needs screen inspection and any required user decision. Do not
+force input past it. `all` covers the parent's children, which may include
+unrelated work: never signal those children; use bounded per-address waits for
+this run if unrelated children prevent completion. The drain's own `exit_code`
+is null even when a child failed, so record each member's outcome with the terms
+in [operations](../hc-workflow/references/operations.md#4-collect) §4. Only a
+verified member is PASS; a blocked or failed member is ISSUES or BLOCKED as its
+evidence shows. Done/idle alone is not acceptance; a missing report or required
+slice is BLOCKED.
 
 ## Race selection and cancellation
 
@@ -87,8 +92,8 @@ After a winner qualifies, cancel every remaining task-owned loser:
    needs no interrupt/kill. Record its outcome as cancelled, rejected or
    completed, never as an accepted winner or silently missing coverage.
 
-Drain the owned remainder with `hc wait --children all --timeout 30` and inspect
-each bound address. Accept the winner with the existing per-member receipt
+Drain the owned remainder with `hc wait --children all --timeout 30`, one per
+tool call, and inspect each bound address's own outcome. Accept the winner with the existing per-member receipt
 procedure against matching before/after revision observations. Never apply
 loser changes to the winner's worktree or the coordinator checkout automatically.
 If no candidate qualifies, retain all outcomes and report ISSUES or BLOCKED.

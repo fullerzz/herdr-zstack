@@ -19,7 +19,7 @@ function tempHome(t) {
   return home;
 }
 
-function zstackAt(root, { version = '0.22.0', nativeHosts = true } = {}) {
+function zstackAt(root, { version = '0.28.0', nativeHosts = true } = {}) {
   fs.mkdirSync(path.join(root, '.claude-plugin'), { recursive: true });
   fs.mkdirSync(path.join(root, 'skills/z-mode/references'), { recursive: true });
   fs.writeFileSync(path.join(root, '.claude-plugin/plugin.json'), JSON.stringify({ name: 'zstack', version }));
@@ -34,7 +34,7 @@ function registerClaude(dir, root) {
   fs.writeFileSync(path.join(dir, 'plugins/known_marketplaces.json'), JSON.stringify({ local: { source: { source: 'directory', path: root } } }));
 }
 
-function fixture(t, { env = {}, versions = {}, replies = {}, answer = null, config = null, zstackVersion = '0.22.0' } = {}) {
+function fixture(t, { env = {}, versions = {}, replies = {}, answer = null, config = null, zstackVersion = '0.28.0' } = {}) {
   const home = tempHome(t);
   const zstack = zstackVersion ? zstackAt(path.join(home, 'zstack'), { version: zstackVersion }) : null;
   if (zstack) registerClaude(path.join(home, '.claude'), zstack);
@@ -45,14 +45,14 @@ function fixture(t, { env = {}, versions = {}, replies = {}, answer = null, conf
   const socket = path.join(home, '.local/state/herdr-core/default/default.sock');
   const fullEnv = { HC_TERMINAL_ID: 't16', HC_TERMINAL_SOCKET: socket, CLAUDECODE: '1', ...env };
   for (const [key, value] of Object.entries(fullEnv)) if (value === undefined) delete fullEnv[key];
-  const table = { 'hc --version': ok('hc 0.1.15\n'), 'herdr-app --version': ok('herdr-app 0.1.10\n'), ...versions };
+  const table = { 'hc --version': ok('hc 0.1.21\n'), 'herdr-app --version': ok('herdr-app 0.1.10\n'), ...versions };
   const core = { id: 'core-1', name: 'mac' };
   const methods = {
-    hello: { result: { generation: 1, version: '0.1.15', core } },
-    'server.status': { result: { core, version: '0.1.15', pid: 7 } },
+    hello: { result: { generation: 1, version: '0.1.21', core } },
+    'server.status': { result: { core, version: '0.1.21', pid: 7 } },
     'terminal.get': { result: { address: 't16', state: 'live', parent: null, name: null, template: null, status: { msg: 'private screen text' } } },
     'templates.list': { result: { templates: [] } },
-    'machine.list': { result: { machines: [{ name: 'vps', state: 'connected', version: '0.1.15' }] } },
+    'machine.list': { result: { machines: [{ name: 'vps', state: 'connected', version: '0.1.21' }] } },
     ...replies,
   };
   const calls = [], dialed = [];
@@ -186,7 +186,7 @@ test('any configured socket key, quoted or bare, refuses; a comment does not', a
 test('core status failure and version drift are reported, not assumed', async t => {
   const down = await fixture(t, { replies: { 'server.status': { error: { message: 'reset', data: { kind: 'io' } } } } }).call();
   assert.match(down.session.reason, /server.status did not answer: io/);
-  const drift = await fixture(t, { versions: { 'hc --version': ok('hc 0.2.0') }, replies: { 'server.status': { result: { core: { id: 'core-1', name: 'mac' }, version: '0.2.0' } } }, zstackVersion: '0.23.0' }).call();
+  const drift = await fixture(t, { versions: { 'hc --version': ok('hc 0.2.0') }, replies: { 'server.status': { result: { core: { id: 'core-1', name: 'mac' }, version: '0.2.0' } } }, zstackVersion: '0.29.0' }).call();
   assert.equal(drift.session.status, 'supported');
   assert.equal(drift.hc.status, 'untested');
   assert.equal(drift.core.status, 'untested');
@@ -204,7 +204,7 @@ test('missing binaries and missing zstack are unavailable', async t => {
 test('the detected host copy decides zstack status; another host copy cannot stand in', async t => {
   const home = tempHome(t);
   registerClaude(path.join(home, '.claude'), zstackAt(path.join(home, 'src'), { nativeHosts: false }));
-  zstackAt(path.join(home, '.codex/plugins/cache/local/zstack/0.22.0'));
+  zstackAt(path.join(home, '.codex/plugins/cache/local/zstack/0.28.0'));
   const report = await fixture(t).call({ home, env: { CLAUDECODE: '1' } });
   assert.equal(report.zstack.status, 'unavailable');
   assert.equal(report.zstack.path, path.join(home, 'src'));
@@ -212,13 +212,13 @@ test('the detected host copy decides zstack status; another host copy cannot sta
   assert.equal(operation(report, 'shared-instructions').status, 'unavailable');
   const codex = await fixture(t).call({ home, env: { CODEX_THREAD_ID: 'x' } });
   assert.equal(codex.zstack.status, 'supported');
-  assert.equal(codex.zstack.path, path.join(home, '.codex/plugins/cache/local/zstack/0.22.0'));
+  assert.equal(codex.zstack.path, path.join(home, '.codex/plugins/cache/local/zstack/0.28.0'));
 });
 
 test('without a detected host, differing copies need --host; one path is supported', async t => {
   const home = tempHome(t);
   registerClaude(path.join(home, '.claude'), zstackAt(path.join(home, 'src')));
-  zstackAt(path.join(home, '.codex/plugins/cache/local/zstack/0.22.0'));
+  zstackAt(path.join(home, '.codex/plugins/cache/local/zstack/0.28.0'));
   const report = await fixture(t).call({ home, env: {} });
   assert.equal(report.zstack.status, 'untested');
   assert.equal(report.zstack.path, null);
@@ -230,9 +230,9 @@ test('without a detected host, differing copies need --host; one path is support
 test('CLAUDE_CONFIG_DIR and CODEX_HOME locate installed zstack', t => {
   const home = tempHome(t), claude = tempHome(t), codex = tempHome(t);
   registerClaude(claude, zstackAt(path.join(claude, 'src')));
-  zstackAt(path.join(codex, 'plugins/cache/local/zstack/0.22.0'));
+  zstackAt(path.join(codex, 'plugins/cache/local/zstack/0.28.0'));
   const found = discoverZstack({ home, env: { CLAUDE_CONFIG_DIR: claude, CODEX_HOME: codex } });
-  assert.deepEqual(found.map(c => [c.host, c.path]), [['claude', path.join(claude, 'src')], ['codex', path.join(codex, 'plugins/cache/local/zstack/0.22.0')]]);
+  assert.deepEqual(found.map(c => [c.host, c.path]), [['claude', path.join(claude, 'src')], ['codex', path.join(codex, 'plugins/cache/local/zstack/0.28.0')]]);
   assert.deepEqual(discoverZstack({ home, env: {} }), []);
 });
 

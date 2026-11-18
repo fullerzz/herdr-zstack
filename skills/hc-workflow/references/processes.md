@@ -20,10 +20,11 @@ hc rm <name>
 
 - After `--`, hc runs the program and its arguments directly, with no shell and no rc files. A single argument that contains a space or shell syntax, such as `-- 'cd app && bun test'`, runs under POSIX `sh -c`, not your login shell. The program gets the core's login-session environment, not your shell's: pass variables with `-- env K=V <program>`. See [shell and environment](#shell-and-environment).
 - Names are unique among all live terminals in the core, so the `$HC_TERMINAL_ID-` prefix keeps yours from colliding with another agent's. If the launch fails, for example with `name_taken`, fix it first; never wait on, read or remove a name you did not start.
-- Keep `--timeout` below your shell tool's own command limit. Claude Code's Bash tool stops waiting after 120 seconds by default and moves the command to a background task. A bare `hc wait` uses hc's default: config `wait_timeout`, else 180 seconds.
-- Keep working while it runs. Start several at once and collect each with `hc wait --children any --timeout 90`, or wait on each name.
+- Run one `hc wait` per tool call, with `--timeout` at most 90 and below your host tool's own command limit. Claude Code's Bash tool stops waiting after 120 seconds by default and moves the command to a background task; Codex and other hosts have their own limits. A bare `hc wait` uses hc's default: config `wait_timeout`, else 180 seconds. Never chain waits or loop over them in one call, raise the host tool's timeout, or move the wait into a host background job.
+- Keep working while it runs. Start several at once and collect them with one `hc wait --children any --timeout 90` per tool call, or wait on each name.
 - Its evidence is the command, cwd, `exit_code` and the output you read. Only `exit_code: 0` from a real exit passes: `hc wait` reports it as `reason: exit`, and `hc get` as `reason: exited`. See [exit codes and evidence](#exit-codes-and-evidence). Put that evidence in your report. A quick check needs no run index, member record, labels or notes entry.
-- `reason: timeout` is a check-in. Wait again on the same name. Never launch a duplicate.
+- `reason: timeout` is a check-in, not completion and not permission to relaunch. `hc wait` exits 0 on a timeout too, so read `reason`, never the shell status. Wait again on the same name. Never launch a duplicate.
+- Keep failures visible in a compound command. Under `sh -c`, `a && b` stops at the first failure, `a; b` reports only `b`, and a pipe into `tee` reports only `tee`. hc keeps the output for `hc read`, so no `tee` is needed. A required pipe runs as `-- bash -o pipefail -c '<pipeline>'`; the coordinator saw `sh -c` report 0 for a failing pipe into `tee` on hc 0.1.21 on macOS, and 1 with `set -o pipefail`. Whether another machine's `sh` accepts `pipefail` is untested.
 - Never add `--rm` to a background check. It removes a terminal that exits while no wait is running for it, and a later `hc wait` then returns `not_found` with no exit code. Remove it yourself with `hc rm` after you collect the result.
 - If it outlives your current step, or a pause comes before it ends, promote it: record it in the notes as an owned process.
 
@@ -37,7 +38,6 @@ hc run --bg --json --name <run>-<purpose> --cwd <checkout> \
 
 - Save the JSON response and its `address`. In the notes, record the address, purpose, exact argv, cwd, readiness text, and who stops the process. Supporting processes stay out of the run index and out of member records. Labels and names locate a terminal. They never prove ownership.
 - A process is parent-linked to the coordinator by default. It ends when the coordinator's program ends. See the persistence policy below.
-- For a check you expect to finish, a foreground `hc run --timeout <s> --cwd <checkout> <program>` returns the program's exit code as its own. On timeout, it prints `[hc] still running as tN` and exits 124. The program keeps running. Wait on that address. Never launch a duplicate.
 - Plain programs report no hc status. A program stuck at an interactive prompt never shows `blocked`. It shows up only as a wait timeout. Read the screen with `hc read <t> --lines 40` after every timeout. Never answer a prompt that changes trust or configuration without specific authorization. Kill the terminal and fix the launch instead.
 
 ## Shell and environment
@@ -70,12 +70,14 @@ hc wait <t> --output "<ready text>" --timeout 30 --json
 ## Exit codes and evidence
 
 ```sh
-hc wait <t> --timeout <s> --json   # reason: exit, exit_code, signal
+hc wait <t> --timeout 90 --json    # reason: exit, exit_code, signal
 hc get <t> --json                  # exit_code, reason, signal, finished_ms persist after exit
 hc read <t> --lines 200            # output for the evidence file
 ```
 
-Record the argv, cwd, `exit_code`, `reason`, `signal` and an output path in the notes. Only `exit_code: 0` with `reason: exited` is a passing run, and the coordinator still judges the output. A killed or signalled program has `exit_code: null`. It never passes. A `timeout` reason is a check-in, so wait again within the host's limit.
+Record the argv, cwd, `exit_code`, `reason`, `signal` and an output path in the notes. Only `exit_code: 0` with `reason: exited` is a passing run, and the coordinator still reads the output. A killed or signalled program has `exit_code: null`. It never passes: after `hc kill`, the coordinator saw `hc get` report `reason: killed`, `signal: 1`. A `timeout` reason is a check-in, so wait again in a later tool call within the host's limit.
+
+Each process passes on its own result. `hc wait --children all` ends when no child is working; its own `exit_code` is `null` and its shell status is 0, even when a child failed. The coordinator saw this on hc 0.1.21 with a child that exited 3. Read each `children[].exit_code`, or `hc get` each address, and record each one.
 
 ## watch-pr
 
@@ -85,7 +87,7 @@ Run the bundled watcher from its absolute installed path, with the target reposi
 hc run --bg --json --name <run>-watch-pr --cwd <target repo> \
   --label run=<run> --label task=<task> --label role=watcher \
   <zstack>/skills/z-mode/scripts/watch-pr/watch-pr --pr <n>
-hc wait <run>-watch-pr --timeout <s> --json
+hc wait <run>-watch-pr --timeout 90 --json
 ```
 
 - The babysit playbook allows background watching only with a supported native runtime and an explicit request. A one-pass `--status-only` check stays a direct command.
@@ -120,4 +122,4 @@ Never put `--keep` on an agent to make it survive a restart. A kept shell is a n
 
 - Pause: account for every process in the handoff, with its address, binding, purpose and last observation. Stop it, or, with explicit authority, leave it running under a recorded `--outlive-parent` decision.
 - Pickup: reconcile each process like a member. An unbound process keeps its evidence. Relaunching it is a fresh decision, never a replay.
-- Cleanup: list `hc ls --all --label run=<run>`, account for each terminal, and remove only the addresses this run created.
+- Cleanup: list `hc ls --all --label run=<run>`, account for each terminal, and remove only the addresses this run created. Save the evidence first. For a live one, run `hc kill <t>` and confirm `state: finished` with `hc get <t>`. Then `hc rm <t>`, one address per command; `hc rm` takes one terminal and removes only a finished one.

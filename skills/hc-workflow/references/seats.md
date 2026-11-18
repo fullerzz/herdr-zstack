@@ -55,7 +55,7 @@ For a writing seat, use `--cwd <worktree>` and `-C <worktree>`, and add `--add-d
 
 `--ask-for-approval never` returns sandbox refusals to the model instead of asking; it grants nothing. Never add `--dangerously-bypass-approvals-and-sandbox`, `--approve-for-me` or `--dangerously-bypass-hook-trust`. Use the CLI's default model unless the user requests an override.
 
-Codex shows a folder-trust dialog for a new directory, and it may also ask to trust hooks. Both appear before the task arrives. For a seat directory inside a Git repository, the trust decision applies to the repository root. Handle them as operations describes: "Trust" persists a configuration entry and needs specific authorization; answer hook trust with "Continue without trusting".
+Codex shows a folder-trust dialog for a new directory, and it may also ask to trust hooks. Both appear before the task arrives. For a seat directory inside a Git repository, the trust decision applies to the repository root. Report both to the user as [operations §3](operations.md#startup-blockers) describes; never answer them yourself. "Trust" persists a configuration entry.
 
 ## 4. Launch a Claude seat
 
@@ -88,7 +88,7 @@ A sandboxed Claude seat cannot run live hc checks, even in its own isolated core
 
 1. Save the launch JSON and bind the seat as operations requires. Confirm the brief prompt arrived once with `hc read <t> --lines 60`.
 2. Record the model identity the screen shows. Codex 0.166.0 shows its model and effort in the status line below the prompt, for example `GPT-6.1-Sol xhigh`. Claude shows its model in the welcome banner. Keep that screen as evidence. If no model is visible, record the identity as unavailable. Count the seat as other-family only when the evidence shows a family other than yours. A seat's own claim about its model is not evidence.
-3. Wait with `hc wait <t> --timeout 90` or `hc wait --children any --timeout 90`, below the host shell tool's own limit. Match the tagged `<hc from="tN …">` sender to the bound seat, then read `$REPORT`. A Codex seat sends nothing: wait on `hc wait <t>` until its status is `done` or `idle`, confirm the screen shows it finished, then read `$REPORT`. A missing report, a blocked screen or a refused command is BLOCKED for the checks it covers. It is never a pass.
+3. Wait with one `hc wait <t> --timeout 90` or `hc wait --children any --timeout 90` per tool call, below the host shell tool's own limit. A `reason: timeout` is a check-in, not completion or permission to relaunch; wait again in a later call. Match the tagged `<hc from="tN …">` sender to the bound seat, then read `$REPORT`. A Codex seat sends nothing: repeat the bounded `hc wait <t> --timeout 90`, one per call, until its status is `done` or `idle`, confirm the screen shows it finished, then read `$REPORT`. Record the seat's outcome with the terms in [operations](operations.md#4-collect) §4. A missing report, a blocked screen or a refused command is BLOCKED for the checks it covers. It is never a pass.
 4. For a read-only seat, confirm every checkout under review is unchanged. For a writing seat, inspect its worktree against its scope.
 5. The report is evidence, not a verdict. The calling workflow judges it: arena scores candidates, and interrogate reproduces findings. If no other-family seat ran, apply that workflow's missing-seat rule and say so. For example, arena skips judging.
 6. Clean up the exact seat address as operations describes, after you save the report and screen.

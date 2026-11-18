@@ -1854,6 +1854,93 @@ Limits: no test pins the guidance text; a changed lifecycle sentence still
 passed `node --test scripts/`. The Codex seat's full-suite run was blocked by
 its sandbox at a socket bind.
 
+## 2026-11-17 — template launches and startup readiness (#46)
+
+Host: macOS, hc and core 0.1.21, herdr-app 0.1.16, Claude Code 2.1.327,
+codex-cli 0.169.0. Preflight found zstack 0.28.0; an uncommitted 0.29.0 version bump
+appeared in that checkout during the run, and the workers read that copy. The installed templates matched
+`templates/` byte for byte. The coordinator ran one synthetic task per template
+in throwaway Git folders, one at a time, using the template-first form from
+operations §3. Each task named the absolute z-mode `SKILL.md`, the literal
+coordinator address and, for z-agent, a report path.
+
+| Template | Launch | Readiness blocker | Delivery | Mode and model seen | Result |
+|---|---|---|---|---|---|
+| `z-agent-claude` | admitted | Claude Code folder-trust dialog for the new folder | `first_message.sent: false` | `auto mode on`, Opus 5.5 | One-line diff, report file, `hc send` notice |
+| `comment-sicko-claude` | admitted | none (folder already trusted) | `sent: true` | `auto mode on`, Opus 5.5 | Report on screen, no file written |
+| `z-agent-codex` | admitted | Codex folder-trust dialog | `sent: false` | `Approve for me`, GPT-6.2-Sol | One-line diff, report file, notice |
+| `comment-sicko-codex` | admitted | Codex update prompt (0.169.0 → 0.169.1) | `sent: false` | `Approve for me`, GPT-6.2-Sol | Report on screen, no file written |
+
+- Each trust dialog went to the user first, and they approved trusting that one
+  scratch folder. The update prompt was answered with Skip. Nothing was updated.
+- A false `first_message.sent` means hc sent neither the template body nor the
+  task. After reading the screen, the coordinator sent both as one message with
+  `hc send --if idle`, once. Each worker then followed its role, including the
+  `hc send -- t16 …` report form. Operations §3 now states this recovery step.
+- `comment-sicko-claude` sent its notice before its final message finished
+  printing. Collecting the screen at that moment would have missed the report.
+  The coordinator waited for `done` before `hc read`, and operations §2 now
+  says so.
+- Every terminal was killed, confirmed `finished` and removed. Codex showed four
+  startup warnings about the user's own configuration (one was read:
+  under-development features). Nothing in them affected the task.
+- The implementing worker itself ran from `z-agent-claude` in a worktree under
+  an already-trusted parent: `first_message.sent: true`, no dialog.
+
+Limits: the model routes in operations §3 (reinstalled templates or a
+template-copy direct launch) were not run. The Codex hook-trust dialog, a
+login prompt and a Manual-mode start did not appear and are untested. One run
+per template is a passing example, not coverage of every startup condition.
+
+## 2026-11-17 — bounded supervision and per-outcome evidence (#47)
+
+Host: macOS, hc and core 0.1.21, herdr-app 0.1.16, Claude Code 2.1.327.
+Preflight found zstack 0.28.0. The coordinator held every wait to one
+`hc wait --timeout 90` (or less) per tool call.
+
+Process checks, with plain programs in a scratch folder:
+
+| Check | Observed |
+|---|---|
+| `hc wait <t> --timeout 3` on `sleep 40` | `reason: timeout`, `exit_code: null`, shell exit **0**; `hc get` still `live`. Only `reason` tells a timeout from an exit. |
+| Second `hc run --name` with a live holder | `name_taken`, exit 1; the holder was untouched |
+| `hc kill` | `hc get`: `state: finished`, `reason: killed`, `signal: 1`, `exit_code: null` |
+| `sh -c 'false \| tee /dev/null'` | `exit_code: 0`; the failure is hidden |
+| The same with `set -o pipefail` | `exit_code: 1` (macOS `/bin/sh`) |
+| Children exiting 0 and 3 under one holder, `hc wait <holder> --children all` | `reason: children`, its own `exit_code: null`, shell exit **0**; the failing child shows only in `children[].exit_code: 3` |
+
+Baseline evidence, one stage at a time, from this run's three `z-agent-claude`
+implementers (one per issue, separate worktrees):
+
+- Caller resolution: the shared session control and a fresh dispatch preflight
+  both reported companion, session and templates `supported`, with caller `t16`.
+- Launch: all three were admitted, with parent `t16`.
+- Delivery: `first_message.sent: true` for all three. Each screen showed
+  `auto mode on` and the worker got past its first read outside the checkout.
+- Reporting: each sent one tagged `hc send -- t16` line naming its report file.
+  Each file existed. The coordinator read each file before acting.
+- Completion: the coordinator froze each worker, then ran `node --test`,
+  `just check` and `git diff --check` in that worktree with
+  `bash -o pipefail -c`. Each ran in its own hc terminal and exited 0.
+- Cleanup: each worker was killed and confirmed `finished` before its
+  acceptance snapshot. Each was removed after acceptance.
+
+The coordinator's own first check command piped `node --test` into `tail`
+under `sh -c 'set -e; …'`. That form hides a failing suite, so it was killed
+and rerun with `pipefail` before any result was read.
+
+Changes: the compatibility baseline moves to hc 0.1.21 and zstack 0.28.0.
+herdr-app stays at 0.1.10, because presentation was not exercised. A direct
+preflight from this branch then reported hc and core `supported`, herdr-app
+0.1.16 `untested`, and zstack `untested`. The zstack checkout had picked up
+an uncommitted 0.29.0 bump by then, which is the intended newer-version
+result.
+
+Limits: no worker reached `blocked` or `error` during its task, and none went
+missing a report. Those outcomes are covered by fixtures and guidance, not by
+live runs. The Codex host's tool limit was not measured. A finished terminal
+that has not been removed was not tested as a name holder.
+
 ## 2026-11-17 — live remote worker on buntu26 (#19)
 
 Coordinator: macOS, hc and core 0.1.21. Remote: `buntu26`, Linux x86_64,
