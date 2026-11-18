@@ -109,6 +109,7 @@ Implemented in #18: roster views, refresh on core fact changes, and a roster lay
 - Remote revision observation via `hc exec --on <m>`, run on the owning machine, never against a matching local path.
 - Remote artifacts via `hc file read --on`.
 - Proof: one remote worker accepted with a remote-observed revision, plus an unreachable-machine reconcile that stays fail-closed.
+- Implemented in code and fixture tests: optional per-member `machine`, remote records kept with the coordinator, `observeRemoteRevision` and `observeMember` ([task record](task-record.md#run-index-for-a-roster)). The live proof is pending.
 
 ### M8 — Retire the legacy path in zstack
 

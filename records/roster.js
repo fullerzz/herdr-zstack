@@ -7,8 +7,9 @@ export const MAX_ROSTER = 3;
 /**
  * @typedef {object} RunMember
  * @property {string} taskId One path segment.
- * @property {string} checkout Normalized absolute path.
+ * @property {string} checkout Normalized absolute path on the member's machine.
  * @property {string[]} writes The member's exclusive checkout-relative write scope.
+ * @property {string} [machine] The owning hc machine; omitted means the index's machine.
  */
 
 /**
@@ -40,13 +41,23 @@ const relative = value => text(value) && !value.startsWith("/") &&
 /** @param {string} checkout @param {string[]} parts */
 const under = (checkout, ...parts) => [checkout === "/" ? "" : checkout, ...parts].join("/");
 
-/** @param {Pick<RunMember, "checkout" | "taskId">} member */
-export const recordPath = member => under(member.checkout, ".herdr-tasks", member.taskId, "task.json");
+/** @param {Pick<RunMember, "machine">} member @param {Pick<RunIndex, "machine">} run */
+export const memberMachine = (member, run) => member.machine ?? run.machine;
+/** @param {Pick<RunMember, "machine">} member @param {Pick<RunIndex, "machine">} run */
+export const isRemote = (member, run) => memberMachine(member, run) !== run.machine;
+// A remote member's record and evidence stay with the coordinator, beside the index.
+/**
+ * @param {Pick<RunMember, "checkout" | "taskId" | "machine">} member
+ * @param {Pick<RunIndex, "checkout" | "machine">} run
+ */
+export const recordPath = (member, run) =>
+  under(isRemote(member, run) ? run.checkout : member.checkout, ".herdr-tasks", member.taskId, "task.json");
 /** @param {Pick<RunIndex, "checkout" | "runId">} run */
 export const runPath = run => under(run.checkout, ".herdr-tasks", run.runId, "run.json");
 
 // Structure only. Write-scope exclusivity needs the owning filesystem, so the
 // coordinator-side `validateRun` in workflows/roster.mjs adds that check.
+// Remote members' checkouts are compared there by text only.
 /**
  * @param {any} run Untrusted parsed JSON.
  * @returns {string[]} Empty when `run` is a valid {@link RunIndex}.
@@ -69,6 +80,7 @@ export function validateRunShape(run) {
     if (member.taskId === run.runId || ids.has(member.taskId)) errors.push(`duplicate task ID ${member.taskId}`);
     ids.add(member.taskId);
     if (!absolute(member.checkout)) errors.push(`${member.taskId}: checkout must be a normalized absolute path`);
+    if (member.machine !== undefined && !segment(member.machine)) errors.push(`${member.taskId}: machine must be an hc machine name`);
     if (!Array.isArray(member.writes) || !member.writes.length || !member.writes.every(relative))
       errors.push(`${member.taskId}: writes must be checkout-relative paths`);
   }

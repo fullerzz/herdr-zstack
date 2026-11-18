@@ -37,7 +37,8 @@ export async function recordAcceptance(path, { writer, observed, before, after, 
   const { writeRecord } = await import('../records/task-record-store.mjs');
   const saved = JSON.parse(await readFile(path, 'utf8'));
   if (!sameRevision(before, after) || !sameRevision(after, observed)) throw new Error('verification snapshot changed');
-  const updated = { ...saved, sequence: saved.sequence + 1, revision: after };
+  // Save only the revision; a snapshot may also carry observation fields such as machine.
+  const updated = { ...saved, sequence: saved.sequence + 1, revision: { commit: after.commit, worktreeDigest: after.worktreeDigest } };
   updated.receipt = acceptanceReceipt(updated, observed, checks);
   await writeRecord(path, updated, { writer, expectedSequence: saved.sequence });
   return updated;

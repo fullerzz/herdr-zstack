@@ -4,7 +4,7 @@ import { mkdtemp, mkdir, readFile, rm, writeFile, symlink, open } from 'node:fs/
 import { execFileSync } from 'node:child_process';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { validateRun, parseRun, recordMemberAcceptance, recordPath, runPath, MAX_ROSTER } from './roster.mjs';
+import { validateRun, parseRun, recordMemberAcceptance, observeMember, recordPath, runPath, MAX_ROSTER } from './roster.mjs';
 import { writeRun, writeRecord } from '../records/task-record-store.mjs';
 import { validateRecord } from '../records/task-record.js';
 
@@ -16,7 +16,7 @@ test('run fixture is a valid index and not a task record', async () => {
   const run = await fixture('run');
   assert.deepEqual(validateRun(run), []);
   assert.notDeepEqual(validateRecord(run), []);
-  assert.equal(recordPath(run.members[0]), '/work/pilot/.herdr-tasks/pilot-a/task.json');
+  assert.equal(recordPath(run.members[0], run), '/work/pilot/.herdr-tasks/pilot-a/task.json');
   assert.equal(runPath(run), '/work/pilot/.herdr-tasks/roster-pilot/run.json');
   for (const name of ['accepted', 'active', 'completed-unverified', 'missing-worker', 'stale-revision'])
     assert.deepEqual(validateRecord(await fixture(name)), [], name);
@@ -68,7 +68,7 @@ async function scratchRun({ persist = true } = {}) {
       handoff: 'handoff.md', artifacts: [], receipt: null };
     observedByTask[taskId] = { machine: 'local', checkout, worker, reachable: true, state: 'finished', ...revision };
     await mkdir(join(checkout, '.herdr-tasks', taskId), { recursive: true });
-    await writeFile(recordPath(run.members[i]), JSON.stringify(records[taskId]));
+    await writeFile(recordPath(run.members[i], run), JSON.stringify(records[taskId]));
   }
   await mkdir(join(checkout, '.herdr-tasks', 'run-1'), { recursive: true });
   if (persist) await writeRun(runPath(run), run, { writer: 'parent' });
@@ -85,7 +85,7 @@ test('member acceptance waits until every writer in the checkout is finished', a
     await assert.rejects(recordMemberAcceptance(run, 'a', inputs(live)), /b: writer is not confirmed finished/);
     const missing = { a: observedByTask.a };
     await assert.rejects(recordMemberAcceptance(run, 'a', inputs(missing)), /b: writer is not confirmed finished/);
-    assert.equal(JSON.parse(await readFile(recordPath(run.members[0]))).sequence, 1);
+    assert.equal(JSON.parse(await readFile(recordPath(run.members[0], run))).sequence, 1);
     const a = await recordMemberAcceptance(run, 'a', inputs(observedByTask));
     const b = await recordMemberAcceptance(run, 'b', inputs(observedByTask));
     assert.deepEqual(a.receipt.revision, b.receipt.revision, 'both receipts bind one snapshot');
@@ -99,11 +99,11 @@ test('no worker or non-coordinator can accept, and mismatched records are refuse
   try {
     await assert.rejects(recordMemberAcceptance(run, 'a', { ...inputs(observedByTask), writer: 'worker-a' }), /run coordinator/);
     await assert.rejects(recordMemberAcceptance({ ...run, coordinator: 'worker-b' }, 'a', { ...inputs(observedByTask), writer: 'worker-b' }), /does not match/);
-    await writeFile(recordPath(run.members[0]), JSON.stringify({ ...records.a, owner: 'parent' }));
+    await writeFile(recordPath(run.members[0], run), JSON.stringify({ ...records.a, owner: 'parent' }));
     await assert.rejects(recordMemberAcceptance(run, 'a', inputs(observedByTask)), /own work/);
-    await writeFile(recordPath(run.members[0]), JSON.stringify(records.a));
+    await writeFile(recordPath(run.members[0], run), JSON.stringify(records.a));
     await assert.rejects(recordMemberAcceptance(run, 'c', inputs(observedByTask)), /not a run member/);
-    await writeFile(recordPath(run.members[1]), JSON.stringify({ ...records.b, taskId: 'other' }));
+    await writeFile(recordPath(run.members[1], run), JSON.stringify({ ...records.b, taskId: 'other' }));
     await assert.rejects(recordMemberAcceptance(run, 'a', inputs(observedByTask)), /does not match/);
   } finally { await rm(checkout, { recursive: true, force: true }); }
 });
@@ -171,7 +171,7 @@ test('acceptance rejects stale and truncated run indexes while a sibling is live
     await assert.rejects(recordMemberAcceptance(stale, 'a', inputs(live)), /stale run/);
     await assert.rejects(recordMemberAcceptance({ ...stale, sequence: 2 }, 'a', inputs(live)), /stale run/);
     await assert.rejects(recordMemberAcceptance(current, 'a', inputs(live)), /not confirmed finished/);
-    const saved = JSON.parse(await readFile(recordPath(run.members[0])));
+    const saved = JSON.parse(await readFile(recordPath(run.members[0], run)));
     assert.equal(saved.receipt, null);
     assert.equal(saved.sequence, 1);
   } finally { await rm(checkout, { recursive: true, force: true }); }
@@ -180,10 +180,10 @@ test('acceptance rejects stale and truncated run indexes while a sibling is live
 test('a foreign-machine member cannot satisfy the freeze guard', async () => {
   const { checkout, run, records, observedByTask } = await scratchRun();
   try {
-    await writeFile(recordPath(run.members[1]), JSON.stringify({ ...records.b, machine: 'remote' }));
+    await writeFile(recordPath(run.members[1], run), JSON.stringify({ ...records.b, machine: 'remote' }));
     const foreign = { ...observedByTask, b: { ...observedByTask.b, machine: 'remote' } };
     await assert.rejects(recordMemberAcceptance(run, 'a', inputs(foreign)), /does not match/);
-    assert.equal(JSON.parse(await readFile(recordPath(run.members[0]))).receipt, null);
+    assert.equal(JSON.parse(await readFile(recordPath(run.members[0], run))).receipt, null);
   } finally { await rm(checkout, { recursive: true, force: true }); }
 });
 
@@ -191,8 +191,8 @@ test('ownership changed during acceptance cannot approve itself', { timeout: 500
   const { checkout, run, records, observedByTask } = await scratchRun();
   let gate;
   try {
-    const aPath = recordPath(run.members[0]);
-    const bPath = recordPath(run.members[1]);
+    const aPath = recordPath(run.members[0], run);
+    const bPath = recordPath(run.members[1], run);
     await rm(bPath);
     execFileSync('/usr/bin/mkfifo', [bPath]);
     const pending = recordMemberAcceptance(run, 'a', inputs(observedByTask));
@@ -259,7 +259,7 @@ test('a Successor replaces a finished owner and is accepted at the restacked hea
     const worker = n => ({ core: 'core-1', terminal: `t${n}`, occupant: `pid-${n}` });
     for (const [n, taskId] of [[1, 'own-1'], [2, 'own-2']]) {
       await mkdir(join(checkout, '.herdr-tasks', taskId), { recursive: true });
-      await writeRecord(recordPath(owner(taskId)), { schemaVersion: 1, sequence: 1, taskId, coordinator: 'parent',
+      await writeRecord(recordPath(owner(taskId), { checkout: coordinator, machine: 'local' }), { schemaVersion: 1, sequence: 1, taskId, coordinator: 'parent',
         machine: 'local', checkout, owner: `worker-${taskId}`, scope: 'a.txt', activity: 'active', worker: worker(n),
         revision: null, brief: 'brief.md', handoff: 'handoff.md', artifacts: [], receipt: null }, { writer: 'parent' });
     }
@@ -329,4 +329,108 @@ test('the Head check compares digests because index flags hide edits from git st
     assert.equal(git(owner, 'rev-parse', 'HEAD'), head);
     assert.notEqual((await observeRevision(owner)).worktreeDigest, (await observeRevision(fresh)).worktreeDigest);
   } finally { await rm(base, { recursive: true, force: true }); }
+});
+
+test('a remote member keeps its record with the coordinator and its checkout is compared by text', async () => {
+  const run = await fixture('run');
+  const remote = (taskId, checkout, machine = 'remote-1') => ({ ...member(taskId, ['src/x.js'], checkout), machine });
+  const one = { ...run, members: [run.members[0], remote('far', '/home/u/wt')] };
+  assert.deepEqual(validateRun(one), []);
+  assert.equal(recordPath(one.members[1], one), '/work/pilot/.herdr-tasks/far/task.json');
+  assert.equal(recordPath({ ...one.members[1], machine: 'local' }, one), '/home/u/wt/.herdr-tasks/far/task.json', 'the index machine is local');
+  assert.deepEqual(validateRun({ ...run, members: [remote('far', '/work/pilot')] }), [], 'a remote path may equal a local one');
+  assert.deepEqual(validateRun({ ...run, members: [remote('a', '/wt'), remote('b', '/wt', 'remote-2')] }), [], 'machines differ');
+  for (const [a, b] of [['/wt', '/wt'], ['/wt', '/wt/inner'], ['/WT', '/wt']])
+    assert.match(validateRun({ ...run, members: [remote('a', a), remote('b', b)] }).join(), /distinct, non-nested/);
+  assert.match(validateRun({ ...run, members: [remote('a', '/wt', 'x/y')] }).join(), /machine name/);
+  assert.match(validateRun({ ...run, members: [member('a', ['.herdr-tasks/far/task.json']), remote('far', '/wt')] }).join(), /coordinator file/);
+});
+
+// Stands in for `hc exec --on <machine>`: runs the observer argv on this host.
+const fixtureExec = async ({ argv }) => execFileSync(argv[0], argv.slice(1), { maxBuffer: 64 * 1024 * 1024 });
+
+async function remoteRun({ terminal = 'remote-1/t3' } = {}) {
+  const base = await mkdtemp(join(tmpdir(), 'hc-remote-run-'));
+  const git = (...args) => execFileSync('git', ['-C', join(base, 'far'), ...args], { encoding: 'utf8' }).trim();
+  const coordinator = join(base, 'coordinator');
+  await mkdir(join(base, 'far'));
+  git('init', '-q');
+  git('config', 'user.email', 'test@example.invalid');
+  git('config', 'user.name', 'test');
+  await writeFile(join(base, 'far', 'x.txt'), '1\n');
+  git('add', '.');
+  git('commit', '-qm', 'base');
+  await writeFile(join(base, 'far', 'x.txt'), 'dirty\n');
+  const run = { schemaVersion: 1, sequence: 1, runId: 'run-1', coordinator: 'parent', machine: 'local', checkout: coordinator,
+    members: [{ taskId: 'far', checkout: join(base, 'far'), writes: ['x.txt'], machine: 'remote-1' }] };
+  const worker = { core: 'core-r', terminal, occupant: 'pid-9' };
+  const record = { schemaVersion: 1, sequence: 1, taskId: 'far', coordinator: 'parent', machine: 'remote-1',
+    checkout: run.members[0].checkout, owner: 'worker-far', scope: 'x.txt', activity: 'active', worker, revision: null,
+    brief: join(coordinator, '.herdr-tasks/far/brief.md'), handoff: join(coordinator, '.herdr-tasks/far/handoff.md'), artifacts: [], receipt: null };
+  for (const dir of ['far', 'run-1']) await mkdir(join(coordinator, '.herdr-tasks', dir), { recursive: true });
+  await writeRecord(recordPath(run.members[0], run), record, { writer: 'parent' });
+  await writeRun(runPath(run), run, { writer: 'parent' });
+  return { base, run, record, worker };
+}
+
+const remoteInputs = (observed, snapshot = observed) => ({ writer: 'parent', observedByTask: { far: observed }, before: snapshot, after: snapshot,
+  checks: [{ command: 'hc exec --on remote-1 -- sh check.sh', exitCode: 0, evidence: 'check.log' }] });
+
+test('a remote member is accepted only from a revision observed on its own machine', async () => {
+  const { observeRevision } = await import('../records/task-record-store.mjs');
+  const { acceptanceStatus } = await import('../records/task-record.js');
+  const { base, run, worker } = await remoteRun();
+  try {
+    const observed = await observeMember(run, 'far', { worker, state: 'finished' }, { exec: fixtureExec });
+    assert.equal(observed.reachable, true);
+    assert.equal(observed.machine, 'remote-1');
+    const local = await observeRevision(run.members[0].checkout);
+    assert.equal(observed.worktreeDigest, local.worktreeDigest, 'the fixture tree is the same one');
+    // The same path observed locally, unlabelled or labelled with the coordinator's machine, never substitutes.
+    const labelled = { ...local, machine: 'local', checkout: run.members[0].checkout };
+    for (const substitute of [local, labelled])
+      await assert.rejects(recordMemberAcceptance(run, 'far', remoteInputs(observed, substitute)), /before revision was not observed on remote-1/);
+    await assert.rejects(recordMemberAcceptance(run, 'far', remoteInputs({ ...observed, ...labelled }, observed)), /observed revision was not observed on remote-1/);
+    assert.equal(JSON.parse(await readFile(recordPath(run.members[0], run))).sequence, 1);
+    const accepted = await recordMemberAcceptance(run, 'far', remoteInputs(observed));
+    assert.equal(accepted.receipt.decision, 'accepted');
+    assert.equal(accepted.worker.terminal, 'remote-1/t3');
+    const revision = { commit: observed.commit, worktreeDigest: observed.worktreeDigest };
+    assert.deepEqual(accepted.revision, revision, 'observation fields are not persisted');
+    assert.deepEqual(accepted.receipt.revision, revision);
+    assert.equal(acceptanceStatus(accepted, observed), 'accepted');
+    assert.equal(acceptanceStatus(accepted, { ...local, machine: 'local', checkout: run.members[0].checkout }), 'unverified');
+  } finally { await rm(base, { recursive: true, force: true }); }
+});
+
+test('an unreachable or failing remote machine stays fail-closed', async () => {
+  const { reconcile } = await import('./worker-lifecycle.mjs');
+  const { base, run, worker } = await remoteRun();
+  try {
+    const good = await observeMember(run, 'far', { worker, state: 'finished' }, { exec: fixtureExec });
+    const failures = [
+      await observeMember(run, 'far', { worker, state: 'finished', reachable: true, ...good }, { exec: async () => { throw new Error('machine_unreachable'); } }),
+      await observeMember(run, 'far', { worker, state: 'finished' }, { exec: async () => Buffer.from('C deadbeef\n') }),
+      await observeMember(run, 'far', null, { exec: fixtureExec }),
+    ];
+    for (const observed of failures) {
+      assert.equal(observed.reachable, false);
+      assert.equal(observed.commit, undefined, 'no revision from a failed observation');
+      assert.equal(reconcile({ ...JSON.parse(await readFile(recordPath(run.members[0], run))), revision: good }, observed).state, 'unavailable');
+      await assert.rejects(recordMemberAcceptance(run, 'far', remoteInputs(observed, good)), /not confirmed finished|not observed/);
+    }
+    const saved = JSON.parse(await readFile(recordPath(run.members[0], run)));
+    assert.equal(saved.sequence, 1);
+    assert.equal(saved.receipt, null);
+  } finally { await rm(base, { recursive: true, force: true }); }
+});
+
+test('a remote worker address must be qualified with its machine', async () => {
+  for (const terminal of ['t3', 'other/t3', 'remote-1/t3/x']) {
+    const { base, run, worker } = await remoteRun({ terminal });
+    try {
+      const observed = await observeMember(run, 'far', { worker, state: 'finished' }, { exec: fixtureExec });
+      await assert.rejects(recordMemberAcceptance(run, 'far', remoteInputs(observed)), /qualified as remote-1\/tN/);
+    } finally { await rm(base, { recursive: true, force: true }); }
+  }
 });

@@ -65,4 +65,4 @@ Steps not listed are execution-neutral and stay direct.
 - Nested sub-coordinators and more than three live members per index are unavailable. The rolling index keeps at most three in flight.
 - Processes, including a PR watcher, follow [supporting processes](processes.md). Live proof covers the local macOS host only. Remote, Linux and host-shutdown recovery are untested.
 - Writing seats are unproven live. A verifier that must write repro files is a coverage gap until that is proven.
-- Remote members are a later milestone. Every member runs on the index's machine.
+- A member may run on another machine, as [remote members](operations.md#remote-members) describes. Remote launch, observation and acceptance pass fixture tests only; live remote proof is pending.

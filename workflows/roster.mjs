@@ -1,11 +1,12 @@
 import { join, resolve, dirname, basename } from 'node:path';
 import { realpathSync, lstatSync } from 'node:fs';
 import { isDeepStrictEqual } from 'node:util';
-import { withFileLock } from '../records/task-record-store.mjs';
+import { withFileLock, observeRevision } from '../records/task-record-store.mjs';
+import { observeRemoteRevision } from '../records/remote-revision.mjs';
 import { reconcile, recordAcceptance } from './worker-lifecycle.mjs';
-import { validateRunShape, recordPath, runPath, MAX_ROSTER } from '../records/roster.js';
+import { validateRunShape, recordPath, runPath, memberMachine, isRemote, MAX_ROSTER } from '../records/roster.js';
 
-export { recordPath, runPath, MAX_ROSTER };
+export { recordPath, runPath, memberMachine, isRemote, MAX_ROSTER };
 
 const overlaps = (left, right) => left === right || left.startsWith(`${right}/`) || right.startsWith(`${left}/`);
 
@@ -35,14 +36,26 @@ export function validateRun(run) {
 }
 
 // Writers need exclusive files or separate, non-nested checkouts; nobody but the
-// coordinator may write a member record or the run index.
+// coordinator may write a member record or the run index. Every record, remote
+// members' included, is a local file here.
 export function scopeConflicts(run) {
   const conflicts = [];
   const coordinatorCheckout = scopePath(run.checkout);
-  const memberRecords = run.members.map(member => scopePath(recordPath(member)));
+  const memberRecords = run.members.map(member => scopePath(recordPath(member, run)));
   if (new Set(memberRecords).size !== memberRecords.length) conflicts.push('duplicate member record paths');
   const protectedPaths = memberRecords.concat(scopePath(runPath(run)));
-  const members = run.members.map(member => ({ ...member, checkout: scopePath(member.checkout),
+  // The local filesystem cannot resolve another machine's paths, so a remote
+  // member gets its own checkout, compared by text with case folded, and its
+  // writes are never checked against local paths.
+  const remote = run.members.filter(member => isRemote(member, run));
+  const folded = path => path.normalize('NFC').toLowerCase();
+  remote.forEach((member, index) => {
+    for (const other of remote.slice(index + 1)) {
+      if (memberMachine(other, run) === memberMachine(member, run) && overlaps(folded(member.checkout), folded(other.checkout)))
+        conflicts.push(`${member.taskId} and ${other.taskId}: remote members need distinct, non-nested checkouts`);
+    }
+  });
+  const members = run.members.filter(member => !isRemote(member, run)).map(member => ({ ...member, checkout: scopePath(member.checkout),
     writes: member.writes.map(path => scopePath(join(member.checkout, path))) }));
   members.forEach((member, index) => {
     const { checkout } = member;
@@ -76,8 +89,38 @@ export function parseRun(source) {
   } catch { return { run: null, errors: ['invalid JSON'] }; }
 }
 
+const sameCheckout = (run, left, right) => memberMachine(left, run) === memberMachine(right, run) &&
+  (isRemote(left, run) ? left.checkout === right.checkout : scopePath(left.checkout) === scopePath(right.checkout));
+const qualified = (terminal, machine) => {
+  const [host, id, ...rest] = String(terminal).split('/');
+  return host === machine && /^t\d+$/.test(id ?? '') && !rest.length;
+};
+
+/**
+ * Fresh evidence for `reconcile` and acceptance. `host` is the `{worker, state}`
+ * the coordinator just read with `hc get`, or null when that query failed. The
+ * revision is observed on the member's own machine: locally for a local member,
+ * through `hc exec --on` for a remote one. `reachable` is true only when this
+ * call observed it; any failure returns an unreachable observation, never a revision.
+ */
+export async function observeMember(run, taskId, host, { exec } = {}) {
+  const member = run.members.find(entry => entry.taskId === taskId);
+  if (!member) throw new Error(`${taskId} is not a run member`);
+  const machine = memberMachine(member, run);
+  const { commit, worktreeDigest, reachable, ...facts } = host ?? {};
+  const base = { ...facts, machine, checkout: member.checkout };
+  if (!host) return { ...base, reachable: false, error: 'host query failed' };
+  try {
+    const revision = isRemote(member, run)
+      ? await observeRemoteRevision(machine, member.checkout, exec ? { exec } : {})
+      : { machine, checkout: member.checkout, ...await observeRevision(member.checkout) };
+    return { ...base, ...revision, reachable: true };
+  } catch (error) { return { ...base, reachable: false, error: error.message }; }
+}
+
 // Accept one member only when every writer sharing its checkout is finished, so
-// the coordinator's single before/after snapshot covers all of them.
+// the coordinator's single before/after snapshot covers all of them. A remote
+// member has its checkout to itself, and every snapshot must come from its machine.
 export async function recordMemberAcceptance(run, taskId, { writer, observedByTask, before, after, checks }) {
   const { readFile } = await import('node:fs/promises');
   const errors = validateRun(run);
@@ -85,18 +128,28 @@ export async function recordMemberAcceptance(run, taskId, { writer, observedByTa
   if (writer !== run.coordinator) throw new Error('only the run coordinator may accept');
   const member = run.members.find(entry => entry.taskId === taskId);
   if (!member) throw new Error(`${taskId} is not a run member`);
+  if (isRemote(member, run)) {
+    const machine = memberMachine(member, run);
+    for (const [label, snapshot] of [['before', before], ['after', after], ['observed', observedByTask?.[taskId]]]) {
+      if (snapshot?.machine !== machine || snapshot?.checkout !== member.checkout)
+        throw new Error(`${taskId}: ${label} revision was not observed on ${machine}`);
+    }
+  }
   return withFileLock(runPath(run), async () => {
     const current = JSON.parse(await readFile(runPath(run), 'utf8'));
     if (!isDeepStrictEqual(current, run)) throw new Error('stale run: does not match persisted index');
-    for (const sibling of current.members.filter(entry => scopePath(entry.checkout) === scopePath(member.checkout))) {
-      const saved = JSON.parse(await readFile(recordPath(sibling), 'utf8'));
-      if (saved.taskId !== sibling.taskId || scopePath(saved.checkout) !== scopePath(sibling.checkout) ||
-        saved.coordinator !== run.coordinator || saved.machine !== run.machine)
+    for (const sibling of current.members.filter(entry => sameCheckout(current, entry, member))) {
+      const machine = memberMachine(sibling, current);
+      const saved = JSON.parse(await readFile(recordPath(sibling, current), 'utf8'));
+      if (saved.taskId !== sibling.taskId || !sameCheckout(current, { ...sibling, checkout: saved.checkout }, sibling) ||
+        saved.coordinator !== run.coordinator || saved.machine !== machine)
         throw new Error(`${sibling.taskId}: record does not match the run index`);
+      if (isRemote(sibling, current) && !qualified(saved.worker?.terminal, machine))
+        throw new Error(`${sibling.taskId}: a remote worker address must be qualified as ${machine}/tN`);
       if (saved.owner === writer) throw new Error(`${sibling.taskId}: a worker cannot accept its own work`);
       if (reconcile(saved, observedByTask?.[sibling.taskId]).state !== 'finished')
         throw new Error(`${sibling.taskId}: writer is not confirmed finished`);
     }
-    return recordAcceptance(recordPath(member), { writer, observed: observedByTask[taskId], before, after, checks });
+    return recordAcceptance(recordPath(member, current), { writer, observed: observedByTask[taskId], before, after, checks });
   });
 }
