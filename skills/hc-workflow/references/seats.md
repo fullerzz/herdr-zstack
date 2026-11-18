@@ -55,7 +55,7 @@ For a writing seat, use `--cwd <worktree>` and `-C <worktree>`, and add `--add-d
 
 `--ask-for-approval never` returns sandbox refusals to the model instead of asking; it grants nothing. Never add `--dangerously-bypass-approvals-and-sandbox`, `--approve-for-me` or `--dangerously-bypass-hook-trust`. Use the CLI's default model unless the user requests an override.
 
-Codex shows a folder-trust dialog for a new directory, and it may also ask to trust hooks. Both appear before the task arrives. For a seat directory inside a Git repository, the trust decision applies to the repository root. Handle them as operations describes: "Trust" persists a configuration entry and needs specific authorization; answer hook trust with "Continue without trusting".
+Codex shows a folder-trust dialog for a new directory, and it may also ask to trust hooks. Both appear before the task arrives. For a seat directory inside a Git repository, the trust decision applies to the repository root. Report both to the user as [operations §3](operations.md#startup-blockers) describes; never answer them yourself. "Trust" persists a configuration entry.
 
 ## 4. Launch a Claude seat
 
