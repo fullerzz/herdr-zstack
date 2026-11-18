@@ -19,7 +19,7 @@ With Herdr selected, hc replaces the host's own background and delegation tools.
 | A sleep, poll or until-loop, or a host monitor tool | `hc wait <t> --timeout 90` for exit, `hc wait <t> --output "<text>" --timeout 90` for readiness, `hc wait --children any --timeout 90` for the next of several |
 | A CI watch in the foreground | `hc run --bg --no-notify --name "$HC_TERMINAL_ID-ci" --cwd <checkout> -- gh run watch <id> --exit-status`, then `hc wait "$HC_TERMINAL_ID-ci" --timeout 90` |
 | Several independent slow checks in sequence | One `hc run --bg` each, then one `hc wait --children any --timeout 90` per tool call until each has reported its own exit |
-| The host's native agent or subagent tool, when the playbook delegates | A worker launched as [operations](references/operations.md) §3 describes |
+| The host's native agent or subagent tool, when the playbook delegates | A worker launched from its installed role template, as [operations](references/operations.md) §3 describes |
 
 The [quick background check](references/processes.md#quick-background-check) tier in supporting processes is the full procedure for the first rows. It needs no run index or record. Keep in your own shell only file edits and commands you expect to finish in under about 30 seconds.
 
