@@ -1853,3 +1853,41 @@ cause of the unprompted first command was not isolated.
 Limits: no test pins the guidance text; a changed lifecycle sentence still
 passed `node --test scripts/`. The Codex seat's full-suite run was blocked by
 its sandbox at a socket bind.
+
+## 2026-11-17 — template launches and startup readiness (#46)
+
+Host: macOS, hc and core 0.1.21, herdr-app 0.1.16, Claude Code 2.1.327,
+codex-cli 0.169.0. Preflight found zstack 0.28.0; an uncommitted 0.29.0 version bump
+appeared in that checkout during the run, and the workers read that copy. The installed templates matched
+`templates/` byte for byte. The coordinator ran one synthetic task per template
+in throwaway Git folders, one at a time, using the template-first form from
+operations §3. Each task named the absolute z-mode `SKILL.md`, the literal
+coordinator address and, for z-agent, a report path.
+
+| Template | Launch | Readiness blocker | Delivery | Mode and model seen | Result |
+|---|---|---|---|---|---|
+| `z-agent-claude` | admitted | Claude Code folder-trust dialog for the new folder | `first_message.sent: false` | `auto mode on`, Opus 5.5 | One-line diff, report file, `hc send` notice |
+| `comment-sicko-claude` | admitted | none (folder already trusted) | `sent: true` | `auto mode on`, Opus 5.5 | Report on screen, no file written |
+| `z-agent-codex` | admitted | Codex folder-trust dialog | `sent: false` | `Approve for me`, GPT-6.2-Sol | One-line diff, report file, notice |
+| `comment-sicko-codex` | admitted | Codex update prompt (0.169.0 → 0.169.1) | `sent: false` | `Approve for me`, GPT-6.2-Sol | Report on screen, no file written |
+
+- Each trust dialog went to the user first, and they approved trusting that one
+  scratch folder. The update prompt was answered with Skip. Nothing was updated.
+- A false `first_message.sent` means hc sent neither the template body nor the
+  task. After reading the screen, the coordinator sent both as one message with
+  `hc send --if idle`, once. Each worker then followed its role, including the
+  `hc send -- t16 …` report form. Operations §3 now states this recovery step.
+- `comment-sicko-claude` sent its notice before its final message finished
+  printing. Collecting the screen at that moment would have missed the report.
+  The coordinator waited for `done` before `hc read`, and operations §2 now
+  says so.
+- Every terminal was killed, confirmed `finished` and removed. Codex showed four
+  startup warnings about the user's own configuration (one was read:
+  under-development features). Nothing in them affected the task.
+- The implementing worker itself ran from `z-agent-claude` in a worktree under
+  an already-trusted parent: `first_message.sent: true`, no dialog.
+
+Limits: the model routes in operations §3 (reinstalled templates or a
+template-copy direct launch) were not run. The Codex hook-trust dialog, a
+login prompt and a Manual-mode start did not appear and are untested. One run
+per template is a passing example, not coverage of every startup condition.
