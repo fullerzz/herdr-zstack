@@ -12,7 +12,7 @@ import { provenance } from './companion.mjs';
 // core directly over `HC_TERMINAL_SOCKET` with read-only JSON-RPC methods.
 // A missing core is a failed connection, never a new core.
 
-export const baseline = { hc: '0.1.15', herdrApp: '0.1.10', zstack: '0.22.0', protocol: 1 };
+export const baseline = { hc: '0.1.21', herdrApp: '0.1.10', zstack: '0.28.0', protocol: 1 };
 
 // The only external commands preflight runs; neither contacts a core.
 const allowed = [['hc', '--version'], ['herdr-app', '--version']];
@@ -53,7 +53,7 @@ export function socketRpc(socket, requests, timeout = 5_000) {
   });
 }
 
-// The socket the hc 0.1.15 CLI addresses, as observed on macOS (see docs/validation.md).
+// The socket the hc CLI addresses, observed on macOS with hc 0.1.15 and rechecked on 0.1.21 (see docs/validation.md).
 export function cliSocket(env, home) {
   if (env.HC_SOCKET) return env.HC_SOCKET;
   const session = env.HC_SESSION || 'default';
@@ -218,7 +218,7 @@ export async function preflight({ env = process.env, home = os.homedir(), platfo
     limits: [
       'A resolved address is not occupant identity: a restored terminal may hold a fresh shell.',
       'Supported means the interface answered; worker launch, delivery, collection and stop need runtime proof.',
-      'The hc CLI socket rule mirrors hc 0.1.15 on macOS; re-check it after hc upgrades.',
+      'The hc CLI socket rule mirrors hc 0.1.21 on macOS; re-check it after hc upgrades.',
     ],
   };
 }

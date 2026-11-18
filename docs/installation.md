@@ -12,8 +12,8 @@ layouts, keybindings, and core settings remain untouched; use the layout recipes
 below to opt into presentation changes. This command does not pull Git changes.
 
 Requires Node 24 or newer; there are no npm dependencies. Compatibility follows
-[the execution contract](execution-contract.md): inspected hc 0.1.15,
-herdr-app 0.1.10, and zstack 0.22.0. Installation does not enable either mode,
+[the execution contract](execution-contract.md): validated hc 0.1.21 and
+zstack 0.28.0, and inspected herdr-app 0.1.10. Installation does not enable either mode,
 dispatch workers, register skills, change layouts/keybindings, or update itself.
 
 Use an explicit absolute **app configuration directory**, normally

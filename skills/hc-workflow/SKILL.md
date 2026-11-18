@@ -18,17 +18,20 @@ With Herdr selected, hc replaces the host's own background and delegation tools.
 | The host's background shell, such as Claude Code's `run_in_background` | The same `hc run --bg` |
 | A sleep, poll or until-loop, or a host monitor tool | `hc wait <t> --timeout 90` for exit, `hc wait <t> --output "<text>" --timeout 90` for readiness, `hc wait --children any --timeout 90` for the next of several |
 | A CI watch in the foreground | `hc run --bg --no-notify --name "$HC_TERMINAL_ID-ci" --cwd <checkout> -- gh run watch <id> --exit-status`, then `hc wait "$HC_TERMINAL_ID-ci" --timeout 90` |
-| Several independent slow checks in sequence | One `hc run --bg` each, then `hc wait --children any --timeout 90` until all have reported |
+| Several independent slow checks in sequence | One `hc run --bg` each, then one `hc wait --children any --timeout 90` per tool call until each has reported its own exit |
 | The host's native agent or subagent tool, when the playbook delegates | A worker launched as [operations](references/operations.md) §3 describes |
 
 The [quick background check](references/processes.md#quick-background-check) tier in supporting processes is the full procedure for the first rows. It needs no run index or record. Keep in your own shell only file edits and commands you expect to finish in under about 30 seconds.
 
-Four rules keep these rows correct:
+These rules keep these rows correct:
 
 - **Command form.** Pass the program and its arguments after `--`. hc runs them directly, with no shell and no rc files. A single argument that contains a space or shell syntax, such as `-- 'cd app && bun test'`, runs under POSIX `sh -c`, not your login shell, so zsh syntax, aliases and functions are unavailable. `hc run` also starts a template when the first word names one, so check `hc templates` when a program name could collide.
-- **Unique names.** Terminal names are unique among all live terminals in the core, not per caller. Prefix every name with your own `$HC_TERMINAL_ID`. If a launch fails, for example with `name_taken`, fix it before any wait, read or remove; never act on a name you did not start.
-- **Waits shorter than the host's command limit.** Pass `--timeout` below your shell tool's own limit. Claude Code's Bash tool stops waiting after 120 seconds by default and moves the command to a background task, the tool this table replaces. A bare `hc wait` uses hc's default: config `wait_timeout`, else 180 seconds. A `reason: timeout` is a check-in: wait again.
+- **Unique names.** Terminal names are unique among all live terminals in the core, not per caller. Prefix every name with your own `$HC_TERMINAL_ID`. If a launch fails, for example with `name_taken`, fix it before any wait, read or remove; never act on a name you did not start, even when hc's hint offers to kill its holder. Act on the returned address, and remove a finished terminal before you reuse its name.
+- **One bounded wait per tool call.** Pass `--timeout` at most 90 and below your host tool's own limit. Claude Code's Bash tool stops waiting after 120 seconds by default and moves the command to a background task, the tool this table replaces; Codex and other hosts use their own tool limits. A bare `hc wait` uses hc's default: config `wait_timeout`, else 180 seconds. Never chain waits or loop over them in one call, raise the host tool's timeout, or hand the wait to a host background job.
+- **Timeouts are check-ins.** A `reason: timeout` means neither completion nor permission to relaunch. `hc wait` exits 0 on a timeout too, so read `reason`, not the shell status. Wait again on the same address in a later call.
 - **Readiness after a timeout.** `--output` matches only text printed after the wait starts, so text printed between the launch and the wait is missed. Start the wait right after the launch. After a `reason: timeout`, run `hc read <t>` before waiting again; the text may already be there.
+- **Evidence per process.** Each process passes only on its own `exit_code: 0` with `reason: exit` and the output you read. A compound command must keep its failures visible: use `&&`, not `;`, and no pipe into `tee`, since `hc read` keeps the output. A required pipe runs as `-- bash -o pipefail -c '<pipeline>'`. An aggregate `--children all` result carries `exit_code: null` itself; read each `children[].exit_code`.
+- **Worker scope.** These rows govern the coordinator. A worker whose template or task bars hc terminals runs its checks in its own authorized shell. That is not a routing defect, and it is no reason to widen the worker's permissions.
 
 Delegation still needs the playbook, the host's permission and the user's authority, and it still passes the Gate below. This table changes how authorized work runs, not whether it runs.
 

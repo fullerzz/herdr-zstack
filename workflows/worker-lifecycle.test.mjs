@@ -41,6 +41,29 @@ test('unknown host state cannot accept or target an interrupt',()=> {
     assert.throws(()=>acceptanceReceipt(saved,unknown,[{command:'check',exitCode:0,evidence:'check.log'}]),/binding/);
   }
 });
+test('a wait timeout is a check-in: the live worker stays bound, unaccepted and never relaunched',()=> {
+  // `hc wait` exits 0 on a timeout; only `reason: timeout` says the worker is still running.
+  const afterTimeout={...observed,status:'working'};
+  assert.equal(reconcile(saved,afterTimeout).state,'bound');
+  assert.equal(dispatchDecision({attempted:true}),'reconcile-only');
+  assert.throws(()=>acceptanceReceipt(saved,afterTimeout,[]),/checks/);
+});
+test('without passing coordinator checks no status yields a receipt, and killed or evidence-free checks never pass',()=> {
+  for (const status of ['blocked','error','idle','done']) assert.throws(()=>acceptanceReceipt(saved,{...observed,status},[]),/checks/,status);
+  const check={command:'node --test',exitCode:0,evidence:'/scratch/check.log'};
+  // A killed check has a null exit code; a missing report leaves no evidence path.
+  for (const bad of [{...check,exitCode:null},{...check,exitCode:124},{...check,evidence:''}])
+    assert.throws(()=>acceptanceReceipt(saved,observed,[bad]),/checks/);
+});
+test('a reused name or address under a new occupant is never controlled or accepted',()=> {
+  const check=[{command:'node --test',exitCode:0,evidence:'/scratch/check.log'}];
+  for (const worker of [{...saved.worker,terminal:'local/t9'},{...saved.worker,occupant:'session-2'}]) {
+    const reused={...observed,worker};
+    assert.equal(reconcile(saved,reused).state,'unbound');
+    assert.deepEqual(pausePlan(saved,reused).interrupt,[]);
+    assert.throws(()=>acceptanceReceipt(saved,reused,check),/binding/);
+  }
+});
 test('record acceptance refuses a changed before/after snapshot',async()=> {
   const {mkdtemp,writeFile,readFile,rm}=await import('node:fs/promises');
   const {tmpdir}=await import('node:os');
