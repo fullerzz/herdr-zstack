@@ -1899,14 +1899,16 @@ stayed in the coordinator's checkout.
   `finished` observation taken right after the freeze, so the receipt rests on
   that observation and not on a fresh `hc get`.
 
-Nothing was installed, upgraded or logged in on buntu26 by this run. Claude
-Code there showed "Update installed" after the task: its own background
-updater ran during the session. The worker's Stop hook failed with
+The coordinator installed, upgraded and logged in to nothing on buntu26. But
+launching Claude Code there let its own background updater run, and it showed
+"Update installed" after the task. A remote launch can therefore change the
+remote CLI version. The worker's Stop hook failed with
 `node: not found`, which comes from a hook in that machine's Claude
 configuration. Neither affected the task.
 
 Limits: one remote worker on one Linux machine. Remote report delivery with
 `hc send`, remote templates, remote recovery after a lost worker or core, and
-a real disconnect were not exercised. Mode bits come from `ls -ld` on the
+a configured machine that hangs or drops mid-query were not exercised: the
+fail-closed check used an unknown name, which hc rejects at once. Mode bits come from `ls -ld` on the
 remote, so the same commit can digest differently on two machines. Only
 observations from the owning machine are compared.
