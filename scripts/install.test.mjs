@@ -374,7 +374,15 @@ case "$*" in *'mcp list --json') printf '%s\\n' '[]' ;; esac
     [path.join(worktree, 'sub'), worktree, repo, ...ancestors(base)]);
   const locked = path.join(base, 'locked');
   fs.mkdirSync(locked);
-  fs.writeFileSync(path.join(locked, '.git'), 'gitdir: elsewhere\n', { mode: 0 });
+  const lockedGit = path.join(locked, '.git');
+  fs.writeFileSync(lockedGit, 'gitdir: elsewhere\n', { mode: 0 });
+  // A root test run can still read a mode-0 file, so check the refusal only when it cannot.
+  let readable = true;
+  try { fs.accessSync(lockedGit, fs.constants.R_OK); } catch { readable = false; }
+  if (readable) {
+    t.diagnostic('unreadable .git case skipped: this user can read mode-0 files');
+    return;
+  }
   const blocked = launch(locked);
   assert.equal(blocked.status, 1);
   assert.match(blocked.stderr, /Could not read the checkout \.git file/);
