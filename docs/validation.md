@@ -45,7 +45,8 @@
   was skipped. That test then ran on its own in an hc terminal, with
   `HERDR_TEST_CODEX` and `HERDR_TEST_CLAUDE` set. All four local and Git
   installations refreshed from 0.1.3 to 0.1.4 and passed. Claude Code's
-  `claude plugin validate .` passed with the new explicit-only frontmatter. `just check`, `herdr-app check mods/task-evidence-tabs` and
+  `claude plugin validate .` passed with the new explicit-only frontmatter.
+  `just check`, `herdr-app check mods/task-evidence-tabs` and
   `git diff --check` passed. The installer CLI accepted `--codex-review-model`
   and `--claude-review-effort`, and it refused an invalid reviewer effort and
   an unknown reviewer CLI.
@@ -85,6 +86,32 @@
   exit status 128 also covers a refusal such as dubious ownership, and in
   that case the launcher pins only the cwd. One run is a passing example, not
   coverage of every startup condition.
+
+### PR review follow-up — 2026-11-22
+
+pullfrog's review of `80d0058` left two open threads. Both were confirmed.
+
+- Codex 0.171.0's
+  [layer loader](https://github.com/openai/codex/blob/rust-v0.171.0/codex-rs/config/src/loader/mod.rs)
+  checks each `.codex` folder's own saved trust before the project root and
+  the main checkout. Its
+  [trust resolver](https://github.com/openai/codex/blob/rust-v0.171.0/codex-rs/git-utils/src/trust.rs)
+  reads `.git` files and never runs `git`. In an isolated `CODEX_HOME` that
+  trusted `repo/a`, the `80d0058` launcher, run from `repo/a/b` through a
+  wrapper that forwarded `mcp list` to the real Codex, listed `repo/a`'s
+  `.codex` MCP server as enabled. MCP was then disabled, but other `repo/a`
+  settings would have applied. The launcher now pins the cwd, every parent
+  folder and the main checkout named by any `gitdir:` file. It no longer runs
+  `git`, so the exit-128 gap is gone. The same probe then returned empty
+  listings. It stops if a `.git` file cannot be read. Fixture tests cover an
+  intermediate folder, a linked worktree, a PATH without `git` and an
+  unreadable `.git` file.
+- The skill now sends a task by hand only after a template launch whose
+  receipt says it was unsent. A direct Codex launch passes the task as an
+  argument, and Codex submits it when its session is ready, so the
+  coordinator waits and never resends it. A task that never appears is
+  reported as unconfirmed delivery.
+- Limits: the direct-launch path still has had no live run.
 
 ## zstack 0.28.0 sync — 2026-11-16
 

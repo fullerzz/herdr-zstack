@@ -164,9 +164,9 @@ pass `--claude-review-model`, `--claude-review-effort`, `--codex-review-model`
 or `--codex-review-effort` at install or update time. They take the same values
 and follow the same update rule as the worker overrides above.
 Claude Code starts with local file-reading tools. Both Codex launch paths use
-Node 24 or newer and `git` on the core's PATH. The launcher pins the review directory, its
-Git toplevel and, for a linked worktree, the main checkout to untrusted settings
-for that invocation, disables enabled MCP servers and
+Node 24 or newer on the core's PATH. The launcher pins the review directory,
+every parent directory and, for a linked worktree, the main checkout to
+untrusted settings for that invocation, disables enabled MCP servers and
 verifies the result before starting Codex in the read-only sandbox with child
 agents disabled. It keeps raw MCP listings private and exits before starting
 the reviewer if a check fails. Codex 0.171.0 then opens at a "Folder access"

@@ -309,7 +309,7 @@ esac
   assert.equal(requests.length, 3);
   assert.ok(requests.every(request => request.startsWith(checkout + '|--no-daemon --sandbox read-only --ask-for-approval never ')));
   for (const args of requests) {
-    assert.ok(args.includes(`projects={${JSON.stringify(checkout)}={trust_level="untrusted"}}`));
+    assert.ok(args.includes(`-c projects={${JSON.stringify(checkout)}={trust_level="untrusted"},`));
     assert.match(args, /--disable multi_agent_v2\b/);
     assert.match(args, /-c agents\.enabled=false\b/);
   }
@@ -333,7 +333,7 @@ esac
   }
 });
 
-test('Codex reviewer pins the Git toplevel and main checkout as untrusted', t => {
+test('Codex reviewer pins every parent folder and the main checkout as untrusted', t => {
   const { base } = templatesFixture(t);
   const launcher = path.join(import.meta.dirname, '../templates/alt-harness-review-codex.mjs');
   const trace = path.join(base, 'requests');
@@ -345,15 +345,18 @@ case "$*" in *'mcp list --json') printf '%s\\n' '[]' ;; esac
     REVIEW_TRACE: trace, GIT_CONFIG_GLOBAL: '/dev/null', GIT_CONFIG_NOSYSTEM: '1' };
   const git = (cwd, ...args) => assert.equal(spawnSync('git', args, { cwd, env }).status, 0, args.join(' '));
   const repo = path.join(base, 'repo'), worktree = path.join(base, 'worktree');
-  fs.mkdirSync(path.join(repo, 'sub'), { recursive: true });
-  fs.writeFileSync(path.join(repo, 'sub/file'), 'x\n');
+  fs.mkdirSync(path.join(repo, 'sub/deep'), { recursive: true });
+  fs.writeFileSync(path.join(repo, 'sub/deep/file'), 'x\n');
   git(repo, 'init', '-q');
   git(repo, 'add', '.');
   git(repo, '-c', 'user.name=Fixture', '-c', 'user.email=fixture@example.invalid', 'commit', '-qm', 'fixture');
   git(repo, 'worktree', 'add', '-q', worktree, '-b', 'review');
-  const pins = cwd => {
+  const launch = (cwd, launchEnv = env) => {
     fs.writeFileSync(trace, '');
-    const result = spawnSync(process.execPath, [launcher, '--model', 'gpt-custom', '--effort', 'high'], { cwd, env, encoding: 'utf8', timeout: 10_000 });
+    return spawnSync(process.execPath, [launcher, '--model', 'gpt-custom', '--effort', 'high'], { cwd, env: launchEnv, encoding: 'utf8', timeout: 10_000 });
+  };
+  const pins = (cwd, launchEnv) => {
+    const result = launch(cwd, launchEnv);
     assert.equal(result.status, 0, result.stderr);
     const requests = fs.readFileSync(trace, 'utf8').trim().split('\n');
     assert.equal(requests.length, 3);
@@ -361,14 +364,20 @@ case "$*" in *'mcp list --json') printf '%s\\n' '[]' ;; esac
     assert.ok(pinned.every(value => value === pinned[0]));
     return [...pinned[0].matchAll(/"([^"]+)"=\{trust_level="untrusted"\}/g)].map(match => match[1]);
   };
-  assert.deepEqual(pins(path.join(repo, 'sub')), [path.join(repo, 'sub'), repo]);
-  assert.deepEqual(pins(path.join(worktree, 'sub')), [path.join(worktree, 'sub'), worktree, repo]);
-  // Without git the roots are unknown, so the launcher stops before any Codex call.
-  fs.writeFileSync(trace, '');
-  const noGit = spawnSync(process.execPath, [launcher, '--model', 'gpt-custom', '--effort', 'high'],
-    { cwd: path.join(repo, 'sub'), env: { ...env, PATH: base }, encoding: 'utf8', timeout: 10_000 });
-  assert.equal(noGit.status, 1);
-  assert.match(noGit.stderr, /Could not resolve the Git checkout roots/);
+  const ancestors = dir => path.dirname(dir) === dir ? [dir] : [dir, ...ancestors(path.dirname(dir))];
+  // An intermediate folder such as `sub` can carry its own saved trust and `.codex` layer.
+  assert.deepEqual(pins(path.join(repo, 'sub/deep')), ancestors(path.join(repo, 'sub/deep')));
+  assert.deepEqual(pins(path.join(worktree, 'sub/deep')),
+    [path.join(worktree, 'sub/deep'), path.join(worktree, 'sub'), worktree, repo, ...ancestors(base)]);
+  // Codex finds roots without git, so the launcher does not need it on PATH.
+  assert.deepEqual(pins(path.join(worktree, 'sub'), { ...env, PATH: base }),
+    [path.join(worktree, 'sub'), worktree, repo, ...ancestors(base)]);
+  const locked = path.join(base, 'locked');
+  fs.mkdirSync(locked);
+  fs.writeFileSync(path.join(locked, '.git'), 'gitdir: elsewhere\n', { mode: 0 });
+  const blocked = launch(locked);
+  assert.equal(blocked.status, 1);
+  assert.match(blocked.stderr, /Could not read the checkout \.git file/);
   assert.equal(fs.readFileSync(trace, 'utf8'), '');
 });
 
