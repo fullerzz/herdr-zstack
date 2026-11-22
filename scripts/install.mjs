@@ -9,6 +9,10 @@ const prefix = 'mods/zstack-task-evidence-tabs/';
 // the prefix lets update and remove delete them and rollback restore them.
 const retiredPrefix = 'mods/zstack-task-evidence/';
 const hash = data => createHash('sha256').update(data).digest('hex');
+const reviewLauncher = 'alt-harness-review-codex.mjs';
+const launcherToken = '@codex-review-launcher@';
+// Reviewer templates take `<cli>-review` overrides; worker overrides never reach them.
+const reviewerPrefix = 'alt-harness-review-';
 // Separate state per target: rolling back one target never reverts the other.
 const targets = {
   mods: {
@@ -19,13 +23,13 @@ const targets = {
   templates: {
     stateName: '.herdr-zstack-templates.json',
     lockName: '.herdr-zstack-templates.lock',
-    validPath: name => /^templates\/[a-z0-9][a-z0-9-]*\.md$/.test(name),
+    validPath: name => /^templates\/[a-z0-9][a-z0-9-]*\.md$/.test(name) || name === `templates/${reviewLauncher}`,
   },
 };
 // Flag syntax from Claude Code 2.1.316 and Codex 0.166.0 help. Codex help lists no effort values, so only their shape is checked.
 const overrideFlags = {
-  claude: { model: value => `--model ${value}`, effort: value => `--effort ${value}`, efforts: /^(low|medium|high|xhigh|max)$/ },
-  codex: { model: value => `-m ${value}`, effort: value => `-c model_reasoning_effort=${value}`, efforts: /^[a-z]+$/ },
+  claude: { model: '--model ', effort: '--effort ', efforts: /^(low|medium|high|xhigh|max)$/ },
+  codex: { model: '-m ', effort: '-c model_reasoning_effort=', efforts: /^[a-z]+$/ },
 };
 
 function replaceFile(target, data) {
@@ -56,28 +60,43 @@ function safePath(home, name = '') {
   return target;
 }
 
-// Roadmap D5: templates keep each CLI's defaults; flags are appended only for explicitly requested settings.
-function renderTemplate(text, file, overrides) {
+function renderTemplate(text, file, overrides, home) {
   const frontmatter = /^---\n([\s\S]*?)\n---\n/.exec(text)?.[1];
   const field = key => frontmatter?.split('\n').find(line => line.startsWith(`${key}: `))?.slice(key.length + 2);
   if (field('name') !== path.basename(file, '.md') || !field('description')) throw new Error(`Template name must match its file and have a description: ${file}`);
   const command = field('command');
-  const flags = overrideFlags[command?.split(' ')[0]];
+  const wrapped = file === 'alt-harness-review-codex.md';
+  if (wrapped && !command?.startsWith(`exec node ${launcherToken} `)) throw new Error(`Missing Codex review launcher in ${file}`);
+  const cli = wrapped ? 'codex' : command?.split(' ')[0];
+  const flags = wrapped ? { model: '--model ', effort: '--effort ' } : overrideFlags[cli];
   if (!flags) throw new Error(`Template command must start with claude or codex: ${file}`);
-  const { model, effort } = overrides[command.split(' ')[0]] ?? {};
-  const extra = [model && flags.model(model), effort && flags.effort(effort)].filter(Boolean);
-  return Buffer.from(extra.length ? text.replace(`\ncommand: ${command}\n`, `\ncommand: ${[command, ...extra].join(' ')}\n`) : text);
+  const role = file.startsWith(reviewerPrefix) ? `${cli}-review` : cli;
+  let rendered = command;
+  for (const key of ['model', 'effort']) {
+    const value = overrides[role]?.[key];
+    if (!value) continue;
+    const option = new RegExp(` ${flags[key]}\\S+`);
+    const replacement = ` ${flags[key]}${value}`;
+    rendered = option.test(rendered) ? rendered.replace(option, replacement) : rendered + replacement;
+  }
+  if (wrapped) {
+    const launcher = path.join(home, 'templates', reviewLauncher);
+    if (/[\r\n]/.test(launcher)) throw new Error('Template launcher path contains a newline');
+    rendered = rendered.replace(launcherToken, () => "'" + launcher.replaceAll("'", "'\\''") + "'");
+  }
+  return Buffer.from(text.replace(`\ncommand: ${command}\n`, () => `\ncommand: ${rendered}\n`));
 }
 
 function validateOverrides(overrides, target, action) {
-  for (const [cli, settings] of Object.entries(overrides)) {
-    if (!overrideFlags[cli] || !settings || typeof settings !== 'object') throw new Error(`Unknown template CLI: ${cli}`);
+  for (const [role, settings] of Object.entries(overrides)) {
+    const cli = role.replace(/-review$/, '');
+    if (!overrideFlags[cli] || !settings || typeof settings !== 'object') throw new Error(`Unknown template CLI: ${role}`);
     for (const [key, value] of Object.entries(settings)) {
       if (value === undefined) continue;
       if (target !== 'templates' || !['install', 'update'].includes(action)) throw new Error('Model and effort overrides apply only to installing or updating templates');
-      if (key === 'model' && !/^[A-Za-z0-9][A-Za-z0-9._:/@-]*$/.test(value)) throw new Error(`Invalid ${cli} model: ${value}`);
-      else if (key === 'effort' && !overrideFlags[cli].efforts.test(value)) throw new Error(`Invalid ${cli} effort: ${value}`);
-      else if (!['model', 'effort'].includes(key)) throw new Error(`Unknown ${cli} setting: ${key}`);
+      if (key === 'model' && !/^[A-Za-z0-9][A-Za-z0-9._:/@-]*$/.test(value)) throw new Error(`Invalid ${role} model: ${value}`);
+      else if (key === 'effort' && !overrideFlags[cli].efforts.test(value)) throw new Error(`Invalid ${role} effort: ${value}`);
+      else if (!['model', 'effort'].includes(key)) throw new Error(`Unknown ${role} setting: ${key}`);
     }
   }
 }
@@ -109,15 +128,19 @@ function modFiles({ source }, validPath) {
   return wanted;
 }
 
-function templateFiles({ templatesSource, overrides }, validPath) {
+function templateFiles({ templatesSource, overrides }, validPath, home) {
   const wanted = {};
   for (const entry of fs.readdirSync(templatesSource, { withFileTypes: true })) {
-    if (!entry.name.endsWith('.md')) continue;
+    if (!entry.name.endsWith('.md') && entry.name !== reviewLauncher) continue;
     const name = 'templates/' + entry.name;
     if (!validPath(name) || !entry.isFile() || entry.isSymbolicLink()) throw new Error(`Invalid template file: ${entry.name}`);
-    wanted[name] = renderTemplate(fs.readFileSync(path.join(templatesSource, entry.name), 'utf8'), entry.name, overrides);
+    const source = fs.readFileSync(path.join(templatesSource, entry.name));
+    wanted[name] = entry.name === reviewLauncher ? source : renderTemplate(source.toString(), entry.name, overrides, home);
   }
-  if (!Object.keys(wanted).length) throw new Error('No templates to install');
+  if (!Object.keys(wanted).some(name => name.endsWith('.md'))) throw new Error('No templates to install');
+  if (wanted['templates/alt-harness-review-codex.md'] && !wanted[`templates/${reviewLauncher}`]) {
+    throw new Error('Missing Codex review launcher source');
+  }
   return wanted;
 }
 
@@ -130,7 +153,7 @@ function transact({ home, action, apply, target: { stateName, validPath }, sourc
   }
   let wanted = {};
   if (action === 'install' || action === 'update') {
-    wanted = sources.templatesSource ? templateFiles(sources, validPath) : modFiles(sources, validPath);
+    wanted = sources.templatesSource ? templateFiles(sources, validPath, home) : modFiles(sources, validPath);
   } else if (action === 'rollback') {
     if (!state.previous || !state.previous.files || !state.previous.owned) throw new Error('No transaction to roll back');
     for (const [name, data] of Object.entries(state.previous.files)) {
@@ -179,7 +202,7 @@ if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.me
     const args = process.argv.slice(2);
     const action = args.shift();
     let home, target, apply = false;
-    const overrides = { claude: {}, codex: {} };
+    const overrides = { claude: {}, codex: {}, 'claude-review': {}, 'codex-review': {} };
     const value = flag => {
       const next = args.shift();
       if (next === undefined || next.startsWith('--')) throw new Error(`${flag} needs a value`);
@@ -187,7 +210,7 @@ if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.me
     };
     while (args.length) {
       const flag = args.shift();
-      const setting = /^--(claude|codex)-(model|effort)$/.exec(flag);
+      const setting = /^--((?:claude|codex)(?:-review)?)-(model|effort)$/.exec(flag);
       if (flag === '--home') home = value(flag);
       else if (flag === '--target') target = value(flag);
       else if (flag === '--apply') apply = true;

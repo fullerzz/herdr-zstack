@@ -56,7 +56,7 @@ A provider or model other than the one requested is a coverage change. Examples 
 Launch a CLI directly only in these cases:
 
 - No installed template fits the role. Read-only explorers, investigators and reviewers that need real tool and sandbox limits are such a case: use the restricted launches in [explorers](explorers.md). The templates do not enforce read-only behavior.
-- A restricted review seat, such as an other-provider judge or adversary. Use the recipes in [seats](seats.md), never a template. Seats keep their own permission modes from seats, such as `dontAsk` for a read-only Claude seat and `--ask-for-approval never` without `--approve-for-me` for Codex.
+- A restricted review seat, such as an other-provider judge or adversary. Use the recipes in [seats](seats.md), never a template. Seats keep their own permission modes from seats, such as `dontAsk` for a read-only Claude seat and `--ask-for-approval never` without `--approve-for-me` for Codex. The one exception is a review the user requests through [alt-harness-review](../../alt-harness-review/SKILL.md): its reviewer templates restrict tools themselves, and its Codex launcher replaces itself with Codex in the same foreground process after its checks. Follow that skill, and confirm delivery on screen.
 - A requested non-default model, through the template copy above.
 
 A direct engineering worker launch carries the templates' safeguards itself. Seats and read-only members use their own recipes instead, and the auto and approval flags below do not apply to them:

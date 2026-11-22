@@ -1,5 +1,118 @@
 # Validation
 
+## Alternate harness review
+
+- Claude Code 2.1.330 listed `herdr-zstack:alt-harness-review` in
+  `claude plugin validate .`. Codex CLI 0.171.0 returned the enabled skill
+  from its app server's `skills/list` after installation into a temporary
+  Codex configuration. The cached skill matched the source byte for byte.
+- `node --test` passed all 147 tests with both host CLIs enabled. Local and
+  Git-backed installations of both hosts upgraded from a 0.1.3 fixture
+  without the review skill and installed the exact skill from 0.1.4.
+  `just check` and `herdr-app check mods/task-evidence-tabs` passed.
+- An isolated hc 0.1.21 core loaded both installed reviewer templates. Both
+  test processes received the first message with `sent: true` and
+  `started: true`, ran as children of the test coordinator, and left a report
+  that `hc read` returned. The Codex fixture used the real CLI to verify MCP
+  settings before a test process received the launch arguments. The installer
+  test covered both launch paths from the review checkout, kept synthetic
+  credentials out of output, and confirmed that the launcher stops if a
+  server remains enabled.
+- A local Responses fixture through Codex CLI 0.171.0 exercised the launch
+  arguments with GPT-6.2-Astra selected. A trusted project MCP server was
+  excluded by invocation-only trust settings, and a user MCP server was
+  disabled. The model input exposed no spawn tool, and a synthetic
+  `collaboration.spawn_agent` call was rejected as unsupported.
+- Live provider review, account-level model availability and report quality
+  remain unverified.
+
+### Review fixes — 2026-11-22
+
+- Codex CLI 0.171.0 with an isolated `CODEX_HOME` that trusted a scratch
+  repository root resolved project trust at the Git toplevel, not at the cwd.
+  From a subdirectory, pinning only the cwd as untrusted still listed the root
+  `.codex/config.toml` MCP server. Pinning the toplevel removed it. A linked
+  worktree inherited the main checkout's trust, and pinning either the
+  worktree toplevel or the main checkout removed the server. A `projects`
+  table with several untrusted entries was accepted. The launcher now pins
+  the cwd, the toplevel and the main checkout. A fixture test checks the pins
+  from a subdirectory and from a linked worktree.
+- Worker overrides no longer change the reviewer templates. The
+  `--claude-review-*` and `--codex-review-*` flags change only the reviewers.
+  Tests now pin the reviewers' read-only launch flags, and the Claude worker
+  send guard covers every non-reviewer Claude template.
+- `node --test` ran 149 tests: 148 passed and the opt-in host refresh test
+  was skipped. That test then ran on its own in an hc terminal, with
+  `HERDR_TEST_CODEX` and `HERDR_TEST_CLAUDE` set. All four local and Git
+  installations refreshed from 0.1.3 to 0.1.4 and passed. Claude Code's
+  `claude plugin validate .` passed with the new explicit-only frontmatter.
+  `just check`, `herdr-app check mods/task-evidence-tabs` and
+  `git diff --check` passed. The installer CLI accepted `--codex-review-model`
+  and `--claude-review-effort`, and it refused an invalid reviewer effort and
+  an unknown reviewer CLI.
+- Roadmap D5 now records the reviewer templates' fixed models as its one
+  exception, as the user chose.
+- Live launch, with the user's approval: one `alt-harness-review-codex` run
+  in an isolated core (`HC_SESSION=hz54`, scratch XDG paths, core
+  `faad08caf3afebd08ebf99db7c3de192`; the user's core
+  `d69141182c390e697d361b31591615ed` was not used). The review checkout was a
+  one-commit scratch repository. hc 0.1.22 reported `agent: "sh"` and, after
+  60 seconds, `first_message.sent: false` with "it never reported its
+  status". The launcher's checks passed and `execve` left Codex 0.171.0 as
+  the foreground process, with the MCP servers disabled and the checkout
+  pinned untrusted. hc typed nothing early. Codex stopped at a "Folder
+  access" dialog for the untrusted checkout, which offers "Open restricted"
+  (no saved trust change) or "Back to Agent Command Center". Every launch
+  through the launcher therefore stops at this dialog before its task.
+- With the user's approval, the coordinator pressed Enter on "Open
+  restricted". Codex then reported `idle` to hc (`app: codex`), and its status
+  line showed `GPT-6.2-Astra high`, `Read Only` and `never`. One
+  `hc send --if idle` delivered the template body and task, and the task
+  appeared once. The turn ended `done` in about 12 seconds with "No findings"
+  for the one-line README, which is correct. `git status --short` in the
+  checkout stayed empty. The one startup warning came from the user's own
+  Codex configuration (under-development features). The reviewer was killed,
+  confirmed `finished` and removed, and the isolated core was stopped.
+- The user chose to let coordinators press "Open restricted" when the dialog
+  names the review checkout, and never "Trust and continue". The skill now
+  says so.
+- Limits: the brief supplied no patch, so the reviewer looked for one and
+  read an unrelated `../pr54.diff` outside the checkout. The read-only sandbox
+  restricts writes, not reads. The direct-launch fallback, which passes the
+  task as a Codex argument, did not run, so whether that argument survives
+  the dialog is unverified. The test folder had no earlier Codex task. The
+  Codex binary also contains an "Open existing task" variant of the dialog,
+  which did not appear. The Claude reviewer template had no live run. Git
+  exit status 128 also covers a refusal such as dubious ownership, and in
+  that case the launcher pins only the cwd. One run is a passing example, not
+  coverage of every startup condition.
+
+### PR review follow-up — 2026-11-22
+
+pullfrog's review of `80d0058` left two open threads. Both were confirmed.
+
+- Codex 0.171.0's
+  [layer loader](https://github.com/openai/codex/blob/rust-v0.171.0/codex-rs/config/src/loader/mod.rs)
+  checks each `.codex` folder's own saved trust before the project root and
+  the main checkout. Its
+  [trust resolver](https://github.com/openai/codex/blob/rust-v0.171.0/codex-rs/git-utils/src/trust.rs)
+  reads `.git` files and never runs `git`. In an isolated `CODEX_HOME` that
+  trusted `repo/a`, the `80d0058` launcher, run from `repo/a/b` through a
+  wrapper that forwarded `mcp list` to the real Codex, listed `repo/a`'s
+  `.codex` MCP server as enabled. MCP was then disabled, but other `repo/a`
+  settings would have applied. The launcher now pins the cwd, every parent
+  folder and the main checkout named by any `gitdir:` file. It no longer runs
+  `git`, so the exit-128 gap is gone. The same probe then returned empty
+  listings. It stops if a `.git` file cannot be read. Fixture tests cover an
+  intermediate folder, a linked worktree, a PATH without `git` and an
+  unreadable `.git` file.
+- The skill now sends a task by hand only after a template launch whose
+  receipt says it was unsent. A direct Codex launch passes the task as an
+  argument, and Codex submits it when its session is ready, so the
+  coordinator waits and never resends it. A task that never appears is
+  reported as unconfirmed delivery.
+- Limits: the direct-launch path still has had no live run.
+
 ## zstack 0.28.0 sync — 2026-11-16
 
 zstack 0.28.0 ([fullerzz/agent-skills#84](https://github.com/fullerzz/agent-skills/pull/84))

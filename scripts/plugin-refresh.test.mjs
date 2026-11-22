@@ -5,7 +5,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { execFileSync, spawnSync } from 'node:child_process';
 import assert from 'node:assert/strict';
-import { resolveCompanion } from './companion.mjs';
+import { provenance, resolveCompanion } from './companion.mjs';
 
 const codex = process.env.HERDR_TEST_CODEX;
 const claude = process.env.HERDR_TEST_CLAUDE;
@@ -15,6 +15,8 @@ test('host CLIs refresh local and Git installations', { skip: !codex || !claude 
   assert.ok(path.isAbsolute(codex) && path.isAbsolute(claude));
   const scratch = fs.mkdtempSync(path.join(fs.realpathSync(os.tmpdir()), 'issue44-refresh-'));
   const repo = fileURLToPath(new URL('..', import.meta.url));
+  const oldVersion = '0.1.3', version = provenance(repo).version;
+  const reviewSkill = 'skills/alt-harness-review/SKILL.md';
   const run = (bin, args, env, cwd) => execFileSync(bin, args, {
     env, cwd, encoding: 'utf8', timeout: 60_000, stdio: ['ignore', 'pipe', 'pipe'],
   });
@@ -27,10 +29,10 @@ test('host CLIs refresh local and Git installations', { skip: !codex || !claude 
       for (const file of ['.claude-plugin', '.codex-plugin', 'scripts', 'skills', 'docs', 'records', 'workflows', 'templates']) {
         fs.cpSync(path.join(repo, file), path.join(source, file), { recursive: true });
       }
-      // Fixture versions must remain distinct regardless of the checkout's release version.
+      fs.rmSync(path.dirname(path.join(source, reviewSkill)), { recursive: true });
       for (const file of ['.claude-plugin/plugin.json', '.codex-plugin/plugin.json']) {
         const target = path.join(source, file), data = JSON.parse(fs.readFileSync(target));
-        data.version = '0.1.1';
+        data.version = oldVersion;
         fs.writeFileSync(target, JSON.stringify(data));
       }
       const env = {
@@ -62,21 +64,20 @@ test('host CLIs refresh local and Git installations', { skip: !codex || !claude 
         return resolveCompanion({ host, env, metadata, cwd: base });
       };
       const before = resolve();
-      assert.equal(before.version, '0.1.1');
+      assert.equal(before.version, oldVersion);
+      assert.equal(fs.existsSync(path.join(before.path, reviewSkill)), false);
       for (const file of ['.claude-plugin/plugin.json', '.codex-plugin/plugin.json']) {
-        const target = path.join(source, file), data = JSON.parse(fs.readFileSync(target));
-        data.version = '0.1.2';
-        fs.writeFileSync(target, JSON.stringify(data));
+        fs.copyFileSync(path.join(repo, file), path.join(source, file));
       }
-      fs.appendFileSync(path.join(source, 'skills/hc-workflow/SKILL.md'), '\nRefresh fixture payload.\n');
+      fs.cpSync(path.dirname(path.join(repo, reviewSkill)), path.dirname(path.join(source, reviewSkill)), { recursive: true });
       if (kind === 'git') commit();
       // Before any host refresh: only a Claude directory marketplace already selects the edited source.
       let edited;
       if (host === 'claude' && kind === 'local') {
         edited = resolve();
-        assert.equal(edited.version, '0.1.2');
+        assert.equal(edited.version, version);
         assert.notEqual(edited.sha256, before.sha256);
-        assert.deepEqual(edited.staleRegistrations.map(r => r.version), ['0.1.1']);
+        assert.deepEqual(edited.staleRegistrations.map(r => r.version), [oldVersion]);
       } else if (host === 'codex' && kind === 'local') {
         assert.throws(resolve, /content mismatch/);
       } else {
@@ -87,7 +88,8 @@ test('host CLIs refresh local and Git installations', { skip: !codex || !claude 
       }
       run(bin, ['plugin', host === 'claude' ? 'update' : 'add', 'herdr-zstack@herdr-zstack-local'], env, base);
       const after = resolve();
-      assert.equal(after.version, '0.1.2');
+      assert.equal(after.version, version);
+      assert.deepEqual(fs.readFileSync(path.join(after.path, reviewSkill)), fs.readFileSync(path.join(repo, reviewSkill)));
       assert.notEqual(before.sha256, after.sha256);
       // For a Claude directory source the refresh only updates the registered cache record.
       if (edited) assert.equal(after.sha256, edited.sha256);
@@ -103,7 +105,7 @@ test('host CLIs refresh local and Git installations', { skip: !codex || !claude 
       assert.match(report.session.reason, /HC_TERMINAL_ID/);
       const how = { 'claude local': 'source selected before refresh; refresh updated registration',
         'codex local': 'stale cache refused before refresh; refresh changed selection' }[`${host} ${kind}`] ?? 'refresh changed selection';
-      console.log(`${host} ${kind}: installation and 0.1.1 -> 0.1.2 PASS (${how})`);
+      console.log(`${host} ${kind}: installation and ${oldVersion} -> ${version} PASS (${how})`);
     }
   } finally {
     fs.rmSync(scratch, { recursive: true, force: true });
