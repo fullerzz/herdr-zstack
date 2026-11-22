@@ -1,5 +1,6 @@
 import { execFileSync } from 'node:child_process';
 import { realpathSync } from 'node:fs';
+import path from 'node:path';
 import { parseArgs } from 'node:util';
 
 function readLaunchOptions() {
@@ -18,6 +19,27 @@ function readLaunchOptions() {
   throw new Error('Expected a reviewer model, effort and at most one review prompt');
 }
 
+// Codex looks up project trust at the Git toplevel and, for a linked worktree,
+// the main checkout, not at a subdirectory cwd. Pin every one of them.
+function checkoutRoots() {
+  const roots = new Set([realpathSync('.')]);
+  let output;
+  try {
+    output = execFileSync('git', ['rev-parse', '--path-format=absolute', '--show-toplevel', '--git-common-dir'], {
+      encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'], timeout: 10_000,
+    });
+  } catch (error) {
+    // Outside Git, only the cwd can hold project settings. Any other failure could hide a root.
+    if (error.status === 128) return [...roots];
+    throw new Error('Could not resolve the Git checkout roots');
+  }
+  const [toplevel, commonDir] = output.trim().split('\n');
+  if (!toplevel || !commonDir) throw new Error('Could not resolve the Git checkout roots');
+  roots.add(realpathSync(toplevel));
+  roots.add(realpathSync(path.dirname(commonDir)));
+  return [...roots];
+}
+
 function enabledServers(args) {
   let servers;
   try {
@@ -34,14 +56,16 @@ function enabledServers(args) {
 }
 
 try {
+  // Check before the MCP probes, so an old Node fails with a clear reason.
+  if (typeof process.execve !== 'function') throw new Error('Node 24 or newer is required to start the reviewer');
   const { model, effort, prompt } = readLaunchOptions();
-  const checkout = realpathSync('.');
+  const untrusted = checkoutRoots().map(root => `${JSON.stringify(root)}={trust_level="untrusted"}`);
   const args = [
     '--no-daemon', '--sandbox', 'read-only', '--ask-for-approval', 'never',
     '--disable', 'apps', '--disable', 'plugins', '--disable', 'hooks', '-c', 'web_search=disabled',
     '--disable', 'multi_agent_v2', '-c', 'agents.enabled=false',
     // Pin trust at both discovery and startup so a trust change cannot add project MCP.
-    '-c', `projects={${JSON.stringify(checkout)}={trust_level="untrusted"}}`,
+    '-c', `projects={${untrusted.join(',')}}`,
     '-m', model, '-c', `model_reasoning_effort=${effort}`,
   ];
   for (const { name } of enabledServers(args)) {

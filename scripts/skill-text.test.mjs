@@ -124,7 +124,9 @@ test('the recommended compound forms keep a failure visible', () => {
 });
 
 test('Claude worker templates allow only end-of-options sends', () => {
-  for (const file of ['templates/comment-sicko-claude.md', 'templates/z-agent-claude.md']) {
+  const workers = files('templates').filter(name => name.includes('claude') && !name.includes('alt-harness-review-'));
+  assert.ok(workers.length >= 2);
+  for (const file of workers) {
     const command = /^command: (.*)$/m.exec(read(file))[1];
     // Quoting can hide `--force` from any deny pattern; after `--`, hc parses it as text.
     assert.match(command, /--allowedTools 'Bash\(hc send -- \*\)'$/, file);

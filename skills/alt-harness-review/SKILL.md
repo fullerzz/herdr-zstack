@@ -1,6 +1,7 @@
 ---
 name: alt-harness-review
-description: Request an independent, read-only code review from the other harness in an interactive hc child session. Use when a Codex user asks for a Claude Code review or a Claude Code user asks for a Codex review through hc.
+description: Explicitly invoked, independent read-only code review from the other harness in one interactive hc child session, for a Codex user who wants a Claude Code review or a Claude Code user who wants a Codex review.
+disable-model-invocation: true
 ---
 
 # Alternate harness review
@@ -24,7 +25,7 @@ Before the first hc core command and immediately before dispatch, follow the fre
 | Codex | `alt-harness-review-claude` | Opus 5.5 (`claude-opus-5-5`), `xhigh` |
 | Claude Code | `alt-harness-review-codex` | `gpt-6.2-astra`, `high` |
 
-Prefer the matching [installed template](../../docs/installation.md#alternate-harness-review-templates). Check `hc templates --json` for its name and expected command, including any model or effort override the user installed. Both Codex paths use the shared launcher in the review checkout. It pins that invocation to untrusted project settings, checks and disables MCP servers locally, and enforces the one-reviewer limit.
+Prefer the matching [installed template](../../docs/installation.md#alternate-harness-review-templates). Check `hc templates --json` for its name and expected command, including any reviewer model or effort override the user installed. Both Codex paths use the shared launcher in the review checkout. It pins that invocation to untrusted project settings, checks and disables MCP servers locally, and enforces the one-reviewer limit.
 
 ```sh
 hc run --bg --json --parent "$HC_TERMINAL_ID" --name "$NAME" --cwd "$CHECKOUT" "$TEMPLATE" "$TASK"
@@ -50,10 +51,10 @@ hc run --bg --json --parent "$HC_TERMINAL_ID" --name "$NAME" --cwd "$CHECKOUT" -
   --model "$MODEL" --effort "$EFFORT" -- "$TASK"
 ```
 
-Use the other harness's own authenticated session. If the CLI, authentication, model or permissions block the launch, report the blocker. Leave login and permission dialogs to the user. If Codex presents a checkout trust prompt, stop the reviewer without continuing past it. A new launch must run the checks again before receiving the brief.
+Use the other harness's own authenticated session. If the CLI, authentication, model or permissions block the launch, report the blocker. Leave login and permission dialogs to the user, with one exception. Codex opens the untrusted review checkout at a "Folder access" dialog, so hc reports `first_message.sent: false` for a Codex template launch. When that dialog names `$CHECKOUT` and its selected choice is "Open restricted", press it once with `hc keys <child> enter`. It keeps the untrusted settings and saves no trust. Never choose "Trust and continue" or answer any other trust prompt. Stop the reviewer if the dialog names another folder, offers no "Open restricted" or has another choice selected. Then read the screen. If the task is not shown, send it once with `hc send --if idle`: for a template launch, the installed template's body without its frontmatter, followed by the task. A new launch must run the checks again before receiving the brief.
 
 ## Collect
 
-1. Save the returned child address and confirm its parent and occupant with `hc get <child> --json`. Check the template's first-message receipt. For a direct launch, verify the task on screen. If delivery is unclear, inspect the screen before sending anything. Resend only after confirming the task was unsent and the intended agent is ready. Verify the harness, model and effort from the startup or status display when visible, and disclose any unverified setting or fallback.
+1. Save the returned child address and confirm its parent and occupant with `hc get <child> --json`. Check the template's first-message receipt, then verify the task on screen for every launch. A Codex template launch normally returns `first_message.sent: false` because Codex waits at the "Folder access" dialog; answer it as [Launch](#launch) describes. If delivery is unclear, inspect the screen before sending anything. Resend only after confirming the task was unsent and the intended agent is ready. Verify the harness, model and effort from the startup or status display when visible, and disclose any unverified setting or fallback.
 2. Supervise that address with one `hc wait <child> --timeout 30 --json` per tool call. A timeout is a check-in. Collect the completed response with `hc read <child> --lines 200`, increasing the history limit if needed. A startup idle state, error or missing report leaves the review incomplete.
 3. Check the findings against the reviewed scope and flag any revision drift. Report the reviewer, findings and coverage limits to the user. After collecting the response, recheck ownership, stop only this child with `hc kill <child>` if live, and remove it with `hc rm <child>` once finished.

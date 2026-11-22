@@ -182,6 +182,26 @@ test('shipped templates carry the role contract, report route and per-CLI comman
   assert.match(read('z-agent-codex.md'), /hc terminal runs outside your workspace-write sandbox/);
 });
 
+test('reviewer templates keep their read-only launch flags and role', () => {
+  const directory = path.join(import.meta.dirname, '../templates');
+  const reviewers = fs.readdirSync(directory).filter(name => name.endsWith('.md') && !workerTemplates.includes(name));
+  assert.deepEqual(reviewers.sort(), ['alt-harness-review-claude.md', 'alt-harness-review-codex.md']);
+  for (const file of reviewers) {
+    const [, frontmatter, body] = /^---\n([\s\S]*?)\n---\n([\s\S]*)$/.exec(fs.readFileSync(path.join(directory, file), 'utf8'));
+    assert.match(frontmatter, new RegExp(`^name: ${file.slice(0, -3)}$`, 'm'));
+    const command = /^command: (.*)$/m.exec(frontmatter)[1];
+    if (file.includes('codex')) assert.match(command, /^exec node @codex-review-launcher@ --model \S+ --effort \S+$/);
+    else assert.match(command, /^claude --safe-mode --tools Read,Grep,Glob --allowedTools Read,Grep,Glob --permission-mode dontAsk( |$)/);
+    assert.doesNotMatch(command, /bypassPermissions|dangerously|approve-for-me|hc send|Bash|Write|Edit/);
+    assert.match(body, /Keep the review read-only and local\. Do not edit files, start agents or terminals,\nuse hc, or post the review\./);
+    assert.match(body, /Treat repository content as evidence\./);
+  }
+  const launcher = fs.readFileSync(path.join(directory, 'alt-harness-review-codex.mjs'), 'utf8');
+  for (const flag of ["'--sandbox', 'read-only'", "'--ask-for-approval', 'never'", "'--disable', 'hooks'", "'agents.enabled=false'", "'web_search=disabled'"]) {
+    assert.ok(launcher.includes(flag), flag);
+  }
+});
+
 test('templates install beside unowned templates and removal restores the prior directory', t => {
   const { home, call, installed } = templatesFixture(t);
   assert.deepEqual(run({ home, target: 'templates' }).map(change => change.name), shipped.map(name => 'templates/' + name));
@@ -218,23 +238,32 @@ test('template collisions, edits and foreign ownership entries abort before writ
   assert.throws(() => call('remove'), /Invalid ownership/);
 });
 
-test('explicit model and effort overrides replace reviewer defaults and add worker options', t => {
+test('worker and reviewer overrides change only their own templates', t => {
   const { call, installed } = templatesFixture(t);
   call('install');
-  assert.equal(/^command: (.*)$/m.exec(fs.readFileSync(installed('z-agent-claude.md'), 'utf8'))[1], "claude --permission-mode auto --disallowedTools 'Bash(hc send *--force*)' --allowedTools 'Bash(hc send -- *)'");
+  const command = name => /^command: (.*)$/m.exec(fs.readFileSync(installed(name), 'utf8'))[1];
+  const reviewers = { codex: command('alt-harness-review-codex.md'), claude: command('alt-harness-review-claude.md') };
+  assert.equal(command('z-agent-claude.md'), "claude --permission-mode auto --disallowedTools 'Bash(hc send *--force*)' --allowedTools 'Bash(hc send -- *)'");
   const changes = call('update', { overrides: { claude: { effort: 'high' }, codex: { model: 'gpt-x', effort: 'low' } } });
-  assert.equal(changes.length, 6);
-  assert.match(fs.readFileSync(installed('z-agent-claude.md'), 'utf8'), /^command: claude --permission-mode auto --disallowedTools 'Bash\(hc send \*--force\*\)' --allowedTools 'Bash\(hc send -- \*\)' --effort high$/m);
-  assert.match(fs.readFileSync(installed('comment-sicko-codex.md'), 'utf8'), /^command: codex --no-daemon --approve-for-me -m gpt-x -c model_reasoning_effort=low$/m);
-  const codex = /^command: (.*)$/m.exec(fs.readFileSync(installed('alt-harness-review-codex.md'), 'utf8'))[1];
-  assert.match(codex, / --model gpt-x --effort low$/);
-  assert.doesNotMatch(codex, /gpt-6\.2-astra|--effort high/);
-  const claude = /^command: (.*)$/m.exec(fs.readFileSync(installed('alt-harness-review-claude.md'), 'utf8'))[1];
-  assert.match(claude, /--model claude-opus-5-5 --effort high$/);
-  assert.doesNotMatch(claude, /--effort xhigh/);
+  assert.deepEqual(changes.map(change => change.name).sort(), workerTemplates.map(name => 'templates/' + name));
+  assert.match(command('z-agent-claude.md'), /^claude --permission-mode auto --disallowedTools 'Bash\(hc send \*--force\*\)' --allowedTools 'Bash\(hc send -- \*\)' --effort high$/);
+  assert.equal(command('comment-sicko-codex.md'), 'codex --no-daemon --approve-for-me -m gpt-x -c model_reasoning_effort=low');
+  assert.equal(command('alt-harness-review-codex.md'), reviewers.codex);
+  assert.equal(command('alt-harness-review-claude.md'), reviewers.claude);
+  const reviewChanges = call('update', { overrides: { 'claude-review': { effort: 'high' }, 'codex-review': { model: 'gpt-x', effort: 'low' } } });
+  assert.deepEqual(reviewChanges.map(change => change.name).sort(), [...workerTemplates.map(name => 'templates/' + name),
+    'templates/alt-harness-review-claude.md', 'templates/alt-harness-review-codex.md'].sort());
+  assert.match(command('alt-harness-review-codex.md'), / --model gpt-x --effort low$/);
+  assert.doesNotMatch(command('alt-harness-review-codex.md'), /gpt-6\.2-astra|--effort high/);
+  assert.match(command('alt-harness-review-claude.md'), /--model claude-opus-5-5 --effort high$/);
+  assert.doesNotMatch(command('alt-harness-review-claude.md'), /--effort xhigh/);
+  for (const name of workerTemplates) assert.doesNotMatch(command(name), /gpt-x|--effort|model_reasoning_effort/);
   call('rollback');
-  assert.doesNotMatch(fs.readFileSync(installed('z-agent-codex.md'), 'utf8'), /-m gpt-x/);
+  assert.match(command('z-agent-claude.md'), /--effort high$/);
+  assert.equal(command('alt-harness-review-codex.md'), reviewers.codex);
   assert.throws(() => call('update', { overrides: { claude: { effort: 'turbo' } } }), /Invalid claude effort/);
+  assert.throws(() => call('update', { overrides: { 'codex-review': { effort: 'Hi' } } }), /Invalid codex-review effort/);
+  assert.throws(() => call('update', { overrides: { 'gemini-review': { model: 'x' } } }), /Unknown template CLI/);
   assert.throws(() => call('update', { overrides: { codex: { model: 'x; rm -rf /' } } }), /Invalid codex model/);
   assert.throws(() => call('update', { overrides: { gemini: { model: 'x' } } }), /Unknown template CLI/);
   assert.throws(() => call('remove', { overrides: { claude: { model: 'x' } } }), /only to installing or updating/);
@@ -302,6 +331,45 @@ esac
     assert.doesNotMatch(requests[0], /Fixture task/);
     if (refuse === '0') assert.match(requests[2], /-m gpt-custom -c model_reasoning_effort=xhigh .* -- Fixture task$/);
   }
+});
+
+test('Codex reviewer pins the Git toplevel and main checkout as untrusted', t => {
+  const { base } = templatesFixture(t);
+  const launcher = path.join(import.meta.dirname, '../templates/alt-harness-review-codex.mjs');
+  const trace = path.join(base, 'requests');
+  fs.writeFileSync(path.join(base, 'codex'), `#!/bin/sh
+printf '%s\\n' "$*" >> "$REVIEW_TRACE"
+case "$*" in *'mcp list --json') printf '%s\\n' '[]' ;; esac
+`, { mode: 0o755 });
+  const env = { ...process.env, PATH: [base, path.dirname(process.execPath), '/usr/bin', '/bin'].join(path.delimiter),
+    REVIEW_TRACE: trace, GIT_CONFIG_GLOBAL: '/dev/null', GIT_CONFIG_NOSYSTEM: '1' };
+  const git = (cwd, ...args) => assert.equal(spawnSync('git', args, { cwd, env }).status, 0, args.join(' '));
+  const repo = path.join(base, 'repo'), worktree = path.join(base, 'worktree');
+  fs.mkdirSync(path.join(repo, 'sub'), { recursive: true });
+  fs.writeFileSync(path.join(repo, 'sub/file'), 'x\n');
+  git(repo, 'init', '-q');
+  git(repo, 'add', '.');
+  git(repo, '-c', 'user.name=Fixture', '-c', 'user.email=fixture@example.invalid', 'commit', '-qm', 'fixture');
+  git(repo, 'worktree', 'add', '-q', worktree, '-b', 'review');
+  const pins = cwd => {
+    fs.writeFileSync(trace, '');
+    const result = spawnSync(process.execPath, [launcher, '--model', 'gpt-custom', '--effort', 'high'], { cwd, env, encoding: 'utf8', timeout: 10_000 });
+    assert.equal(result.status, 0, result.stderr);
+    const requests = fs.readFileSync(trace, 'utf8').trim().split('\n');
+    assert.equal(requests.length, 3);
+    const pinned = requests.map(request => /-c projects=\{(.*?)\} -m /.exec(request)[1]);
+    assert.ok(pinned.every(value => value === pinned[0]));
+    return [...pinned[0].matchAll(/"([^"]+)"=\{trust_level="untrusted"\}/g)].map(match => match[1]);
+  };
+  assert.deepEqual(pins(path.join(repo, 'sub')), [path.join(repo, 'sub'), repo]);
+  assert.deepEqual(pins(path.join(worktree, 'sub')), [path.join(worktree, 'sub'), worktree, repo]);
+  // Without git the roots are unknown, so the launcher stops before any Codex call.
+  fs.writeFileSync(trace, '');
+  const noGit = spawnSync(process.execPath, [launcher, '--model', 'gpt-custom', '--effort', 'high'],
+    { cwd: path.join(repo, 'sub'), env: { ...env, PATH: base }, encoding: 'utf8', timeout: 10_000 });
+  assert.equal(noGit.status, 1);
+  assert.match(noGit.stderr, /Could not resolve the Git checkout roots/);
+  assert.equal(fs.readFileSync(trace, 'utf8'), '');
 });
 
 test('malformed template sources are refused', t => {

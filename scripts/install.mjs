@@ -11,6 +11,8 @@ const retiredPrefix = 'mods/zstack-task-evidence/';
 const hash = data => createHash('sha256').update(data).digest('hex');
 const reviewLauncher = 'alt-harness-review-codex.mjs';
 const launcherToken = '@codex-review-launcher@';
+// Reviewer templates take `<cli>-review` overrides; worker overrides never reach them.
+const reviewerPrefix = 'alt-harness-review-';
 // Separate state per target: rolling back one target never reverts the other.
 const targets = {
   mods: {
@@ -68,9 +70,10 @@ function renderTemplate(text, file, overrides, home) {
   const cli = wrapped ? 'codex' : command?.split(' ')[0];
   const flags = wrapped ? { model: '--model ', effort: '--effort ' } : overrideFlags[cli];
   if (!flags) throw new Error(`Template command must start with claude or codex: ${file}`);
+  const role = file.startsWith(reviewerPrefix) ? `${cli}-review` : cli;
   let rendered = command;
   for (const key of ['model', 'effort']) {
-    const value = overrides[cli]?.[key];
+    const value = overrides[role]?.[key];
     if (!value) continue;
     const option = new RegExp(` ${flags[key]}\\S+`);
     const replacement = ` ${flags[key]}${value}`;
@@ -85,14 +88,15 @@ function renderTemplate(text, file, overrides, home) {
 }
 
 function validateOverrides(overrides, target, action) {
-  for (const [cli, settings] of Object.entries(overrides)) {
-    if (!overrideFlags[cli] || !settings || typeof settings !== 'object') throw new Error(`Unknown template CLI: ${cli}`);
+  for (const [role, settings] of Object.entries(overrides)) {
+    const cli = role.replace(/-review$/, '');
+    if (!overrideFlags[cli] || !settings || typeof settings !== 'object') throw new Error(`Unknown template CLI: ${role}`);
     for (const [key, value] of Object.entries(settings)) {
       if (value === undefined) continue;
       if (target !== 'templates' || !['install', 'update'].includes(action)) throw new Error('Model and effort overrides apply only to installing or updating templates');
-      if (key === 'model' && !/^[A-Za-z0-9][A-Za-z0-9._:/@-]*$/.test(value)) throw new Error(`Invalid ${cli} model: ${value}`);
-      else if (key === 'effort' && !overrideFlags[cli].efforts.test(value)) throw new Error(`Invalid ${cli} effort: ${value}`);
-      else if (!['model', 'effort'].includes(key)) throw new Error(`Unknown ${cli} setting: ${key}`);
+      if (key === 'model' && !/^[A-Za-z0-9][A-Za-z0-9._:/@-]*$/.test(value)) throw new Error(`Invalid ${role} model: ${value}`);
+      else if (key === 'effort' && !overrideFlags[cli].efforts.test(value)) throw new Error(`Invalid ${role} effort: ${value}`);
+      else if (!['model', 'effort'].includes(key)) throw new Error(`Unknown ${role} setting: ${key}`);
     }
   }
 }
@@ -198,7 +202,7 @@ if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.me
     const args = process.argv.slice(2);
     const action = args.shift();
     let home, target, apply = false;
-    const overrides = { claude: {}, codex: {} };
+    const overrides = { claude: {}, codex: {}, 'claude-review': {}, 'codex-review': {} };
     const value = flag => {
       const next = args.shift();
       if (next === undefined || next.startsWith('--')) throw new Error(`${flag} needs a value`);
@@ -206,7 +210,7 @@ if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.me
     };
     while (args.length) {
       const flag = args.shift();
-      const setting = /^--(claude|codex)-(model|effort)$/.exec(flag);
+      const setting = /^--((?:claude|codex)(?:-review)?)-(model|effort)$/.exec(flag);
       if (flag === '--home') home = value(flag);
       else if (flag === '--target') target = value(flag);
       else if (flag === '--apply') apply = true;

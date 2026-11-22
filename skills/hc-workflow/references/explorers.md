@@ -18,7 +18,7 @@ A read-only brief is not enforcement. Launch every read-only explorer, investiga
 - **Codex:** the launch in [seats](seats.md) §3: every MCP server, app and plugin disabled, `--sandbox workspace-write` rooted at the member's empty report directory, and the `CODEX_SANDBOX_ARGS` overrides. The member cannot reach the core, so it writes its report and stops; collect it by status, as seats §5 describes.
 - **Directories:** follow seats §1 steps 2–4. The report directory is `<checkout>/.herdr-tasks/<task>/seat/`, never a temporary folder. Before a Codex launch, prove the write probes.
 - **Family:** an explorer, investigator or reviewer may share the coordinator's model family. Only a judge must come from another family, and it is a Seat.
-- **Templates:** the installed role templates do not apply these restrictions. Do not use them for read-only members.
+- **Templates:** the installed role templates do not apply these restrictions. Do not use them for read-only members. The alternate-harness reviewer templates restrict tools themselves, but they serve only [alt-harness-review](../../alt-harness-review/SKILL.md).
 
 Without `--setting-sources ""` or `CODEX_SANDBOX_ARGS`, the user's own sandbox settings add network egress, other Unix sockets such as Docker's, and extra write roots. With them, these restrictions remove network access and MCP connectors. A source that needs them, such as `gh`, a ticket tracker, chat or observability, cannot run inside a read-only member. Investigate it directly with the coordinator's own tools, or report it as unsearched. Never relax a member's sandbox or tool list to reach a source.
 

@@ -145,8 +145,8 @@ direct launch that keeps the template's command and body.
 Ownership lives in `.herdr-zstack-templates.json` beside `templates/`, separate
 from the mod state, so rolling back one target never reverts the other. The
 installer owns the shipped Markdown templates and the Codex review launcher
-it wrote under `templates/`. A personal file with a shipped name aborts the
-install.
+it wrote under `templates/`. Personal templates and `config.toml` are never
+touched, and a personal file with a shipped name aborts the install.
 
 ### Alternate harness review templates
 
@@ -159,27 +159,33 @@ when installed and includes direct launch recipes for plugin-only installs.
 | `alt-harness-review-claude` | `claude-opus-5-5` | `xhigh` |
 | `alt-harness-review-codex` | `gpt-6.2-astra` | `high` |
 
-The reviewer defaults can be replaced by the same installer overrides above.
+Worker overrides never change these templates. To replace a reviewer default,
+pass `--claude-review-model`, `--claude-review-effort`, `--codex-review-model`
+or `--codex-review-effort` at install or update time. They take the same values
+and follow the same update rule as the worker overrides above.
 Claude Code starts with local file-reading tools. Both Codex launch paths use
-Node 24 or newer on the core's PATH. The launcher pins the review checkout to
-untrusted settings for that invocation, disables enabled MCP servers and
+Node 24 or newer and `git` on the core's PATH. The launcher pins the review directory, its
+Git toplevel and, for a linked worktree, the main checkout to untrusted settings
+for that invocation, disables enabled MCP servers and
 verifies the result before starting Codex in the read-only sandbox with child
 agents disabled. It keeps raw MCP listings private and exits before starting
-the reviewer if a check fails.
+the reviewer if a check fails. Codex 0.171.0 then opens at a "Folder access"
+dialog for the untrusted checkout; the review skill says how to answer it.
 
 ## hc companion skills
 
 The repository root is also a `herdr-zstack` plugin. Its manifests are
 `.claude-plugin/plugin.json` and `.codex-plugin/plugin.json`. It ships
-`herdr-zstack:hc-workflow`, `herdr-zstack:single-worker`, and
-`herdr-zstack:swarm`, which are explicit-only, and `herdr-zstack:hc-first`,
-which agents may load on their own. `hc-first` applies only inside a live hc
-terminal that passes the read-only preflight. It routes slow commands, CI
-watches and servers through hc and grants no delegation authority.
+`herdr-zstack:hc-workflow`, `herdr-zstack:single-worker`,
+`herdr-zstack:swarm` and `herdr-zstack:alt-harness-review`, which are
+explicit-only, and `herdr-zstack:hc-first`, which agents may load on their own.
+`hc-first` applies only inside a live hc terminal that passes the read-only
+preflight. It routes slow commands, CI watches and servers through hc and grants
+no delegation authority.
 [Alt-harness-review](../skills/alt-harness-review/SKILL.md) runs an independent
 review in the other harness through an hc child on request. It prefers the
 [review templates](#alternate-harness-review-templates) when installed.
-zstack resolves the companion when z-mode is activated or restored for automatic
+None of the five installs a hook or activates a mode. zstack resolves the companion when z-mode is activated or restored for automatic
 preflight and native-session detection, or when the user explicitly selects Herdr.
 A verified live hc terminal qualifies for automatic selection even without the app. A missing or ambiguous install is a capability gap.
 

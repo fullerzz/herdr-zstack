@@ -26,6 +26,66 @@
 - Live provider review, account-level model availability and report quality
   remain unverified.
 
+### Review fixes — 2026-11-22
+
+- Codex CLI 0.171.0 with an isolated `CODEX_HOME` that trusted a scratch
+  repository root resolved project trust at the Git toplevel, not at the cwd.
+  From a subdirectory, pinning only the cwd as untrusted still listed the root
+  `.codex/config.toml` MCP server. Pinning the toplevel removed it. A linked
+  worktree inherited the main checkout's trust, and pinning either the
+  worktree toplevel or the main checkout removed the server. A `projects`
+  table with several untrusted entries was accepted. The launcher now pins
+  the cwd, the toplevel and the main checkout. A fixture test checks the pins
+  from a subdirectory and from a linked worktree.
+- Worker overrides no longer change the reviewer templates. The
+  `--claude-review-*` and `--codex-review-*` flags change only the reviewers.
+  Tests now pin the reviewers' read-only launch flags, and the Claude worker
+  send guard covers every non-reviewer Claude template.
+- `node --test` ran 149 tests: 148 passed and the opt-in host refresh test
+  was skipped. That test then ran on its own in an hc terminal, with
+  `HERDR_TEST_CODEX` and `HERDR_TEST_CLAUDE` set. All four local and Git
+  installations refreshed from 0.1.3 to 0.1.4 and passed. Claude Code's
+  `claude plugin validate .` passed with the new explicit-only frontmatter. `just check`, `herdr-app check mods/task-evidence-tabs` and
+  `git diff --check` passed. The installer CLI accepted `--codex-review-model`
+  and `--claude-review-effort`, and it refused an invalid reviewer effort and
+  an unknown reviewer CLI.
+- Roadmap D5 now records the reviewer templates' fixed models as its one
+  exception, as the user chose.
+- Live launch, with the user's approval: one `alt-harness-review-codex` run
+  in an isolated core (`HC_SESSION=hz54`, scratch XDG paths, core
+  `faad08caf3afebd08ebf99db7c3de192`; the user's core
+  `d69141182c390e697d361b31591615ed` was not used). The review checkout was a
+  one-commit scratch repository. hc 0.1.22 reported `agent: "sh"` and, after
+  60 seconds, `first_message.sent: false` with "it never reported its
+  status". The launcher's checks passed and `execve` left Codex 0.171.0 as
+  the foreground process, with the MCP servers disabled and the checkout
+  pinned untrusted. hc typed nothing early. Codex stopped at a "Folder
+  access" dialog for the untrusted checkout, which offers "Open restricted"
+  (no saved trust change) or "Back to Agent Command Center". Every launch
+  through the launcher therefore stops at this dialog before its task.
+- With the user's approval, the coordinator pressed Enter on "Open
+  restricted". Codex then reported `idle` to hc (`app: codex`), and its status
+  line showed `GPT-6.2-Astra high`, `Read Only` and `never`. One
+  `hc send --if idle` delivered the template body and task, and the task
+  appeared once. The turn ended `done` in about 12 seconds with "No findings"
+  for the one-line README, which is correct. `git status --short` in the
+  checkout stayed empty. The one startup warning came from the user's own
+  Codex configuration (under-development features). The reviewer was killed,
+  confirmed `finished` and removed, and the isolated core was stopped.
+- The user chose to let coordinators press "Open restricted" when the dialog
+  names the review checkout, and never "Trust and continue". The skill now
+  says so.
+- Limits: the brief supplied no patch, so the reviewer looked for one and
+  read an unrelated `../pr54.diff` outside the checkout. The read-only sandbox
+  restricts writes, not reads. The direct-launch fallback, which passes the
+  task as a Codex argument, did not run, so whether that argument survives
+  the dialog is unverified. The test folder had no earlier Codex task. The
+  Codex binary also contains an "Open existing task" variant of the dialog,
+  which did not appear. The Claude reviewer template had no live run. Git
+  exit status 128 also covers a refusal such as dubious ownership, and in
+  that case the launcher pins only the cwd. One run is a passing example, not
+  coverage of every startup condition.
+
 ## zstack 0.28.0 sync — 2026-11-16
 
 zstack 0.28.0 ([fullerzz/agent-skills#84](https://github.com/fullerzz/agent-skills/pull/84))
