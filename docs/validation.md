@@ -1,5 +1,31 @@
 # Validation
 
+## Alternate harness review
+
+- Claude Code 2.1.330 listed `herdr-zstack:alt-harness-review` in
+  `claude plugin validate .`. Codex CLI 0.171.0 returned the enabled skill
+  from its app server's `skills/list` after installation into a temporary
+  Codex configuration. The cached skill matched the source byte for byte.
+- `node --test` passed all 147 tests with both host CLIs enabled. Local and
+  Git-backed installations of both hosts upgraded from a 0.1.3 fixture
+  without the review skill and installed the exact skill from 0.1.4.
+  `just check` and `herdr-app check mods/task-evidence-tabs` passed.
+- An isolated hc 0.1.21 core loaded both installed reviewer templates. Both
+  test processes received the first message with `sent: true` and
+  `started: true`, ran as children of the test coordinator, and left a report
+  that `hc read` returned. The Codex fixture used the real CLI to verify MCP
+  settings before a test process received the launch arguments. The installer
+  test covered both launch paths from the review checkout, kept synthetic
+  credentials out of output, and confirmed that the launcher stops if a
+  server remains enabled.
+- A local Responses fixture through Codex CLI 0.171.0 exercised the launch
+  arguments with GPT-6.2-Astra selected. A trusted project MCP server was
+  excluded by invocation-only trust settings, and a user MCP server was
+  disabled. The model input exposed no spawn tool, and a synthetic
+  `collaboration.spawn_agent` call was rejected as unsupported.
+- Live provider review, account-level model availability and report quality
+  remain unverified.
+
 ## zstack 0.28.0 sync — 2026-11-16
 
 zstack 0.28.0 ([fullerzz/agent-skills#84](https://github.com/fullerzz/agent-skills/pull/84))

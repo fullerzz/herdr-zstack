@@ -6,8 +6,9 @@ templates, and Codex and Claude Code plugins. It requires `node`, `codex`, and
 rerun after resolving the failure. Restart host sessions to load updated plugins.
 
 Mods use `HERDR_APP_HOME` or `~/.config/herdr-app`; templates use
-`${XDG_CONFIG_HOME:-$HOME/.config}/herdr-core`. Templates use the CLI default
-models and effort, replacing previous installer-supplied overrides. Personal
+`${XDG_CONFIG_HOME:-$HOME/.config}/herdr-core`. Worker templates use each CLI's
+defaults. Alternate-harness reviewers have their own defaults. Reinstalling
+restores those defaults unless you pass installer overrides again. Personal
 layouts, keybindings, and core settings remain untouched; use the layout recipes
 below to opt into presentation changes. This command does not pull Git changes.
 
@@ -75,7 +76,7 @@ has stopped; review any temporary state before moving it aside.
 
 ## hc role templates
 
-`templates/` ships zstack's two roles as hc templates, one per CLI. Coordinators
+`templates/` ships zstack's two worker roles as hc templates, one per CLI. Coordinators
 launch ordinary workers from these templates by default;
 [operations §3](../skills/hc-workflow/references/operations.md#3-launch) lists the
 direct-launch exceptions, such as restricted review seats.
@@ -131,7 +132,7 @@ hc templates
 node scripts/install.mjs remove --target templates --home "$HOME/.config/herdr-core" --apply
 ```
 
-Templates keep each CLI's default model and effort (roadmap D5). To override one,
+Worker templates keep each CLI's default model and effort (roadmap D5). To override one,
 pass it explicitly at install or update time:
 `--claude-model`, `--claude-effort` (`low`, `medium`, `high`, `xhigh`, `max`),
 `--codex-model` and `--codex-effort`. They render as `--model`/`--effort` for
@@ -142,10 +143,29 @@ those templates. For one run that needs another model, operations §3 describes 
 direct launch that keeps the template's command and body.
 
 Ownership lives in `.herdr-zstack-templates.json` beside `templates/`, separate
-from the mod state, so rolling back one target never reverts the other. Only
-`templates/<name>.md` files this installer wrote are owned. Personal templates and
-`config.toml` are never touched, and a personal template with a shipped name aborts
-the install.
+from the mod state, so rolling back one target never reverts the other. The
+installer owns the shipped Markdown templates and the Codex review launcher
+it wrote under `templates/`. A personal file with a shipped name aborts the
+install.
+
+### Alternate harness review templates
+
+Run `just install-templates` to install both roles and the Codex launcher.
+The [review skill](../skills/alt-harness-review/SKILL.md) prefers these roles
+when installed and includes direct launch recipes for plugin-only installs.
+
+| Template | Model | Effort |
+|---|---|---|
+| `alt-harness-review-claude` | `claude-opus-5-5` | `xhigh` |
+| `alt-harness-review-codex` | `gpt-6.2-astra` | `high` |
+
+The reviewer defaults can be replaced by the same installer overrides above.
+Claude Code starts with local file-reading tools. Both Codex launch paths use
+Node 24 or newer on the core's PATH. The launcher pins the review checkout to
+untrusted settings for that invocation, disables enabled MCP servers and
+verifies the result before starting Codex in the read-only sandbox with child
+agents disabled. It keeps raw MCP listings private and exits before starting
+the reviewer if a check fails.
 
 ## hc companion skills
 
@@ -155,8 +175,11 @@ The repository root is also a `herdr-zstack` plugin. Its manifests are
 `herdr-zstack:swarm`, which are explicit-only, and `herdr-zstack:hc-first`,
 which agents may load on their own. `hc-first` applies only inside a live hc
 terminal that passes the read-only preflight. It routes slow commands, CI
-watches and servers through hc and grants no delegation authority. None of
-the four installs a hook or activates a mode. zstack resolves the companion when z-mode is activated or restored for automatic
+watches and servers through hc and grants no delegation authority.
+[Alt-harness-review](../skills/alt-harness-review/SKILL.md) runs an independent
+review in the other harness through an hc child on request. It prefers the
+[review templates](#alternate-harness-review-templates) when installed.
+zstack resolves the companion when z-mode is activated or restored for automatic
 preflight and native-session detection, or when the user explicitly selects Herdr.
 A verified live hc terminal qualifies for automatic selection even without the app. A missing or ambiguous install is a capability gap.
 
@@ -209,7 +232,7 @@ codex plugin list --marketplace herdr-zstack-local
 Codex reuses this checkout's `.claude-plugin/marketplace.json` catalog and loads
 the plugin's `.codex-plugin/plugin.json` manifest. See OpenAI's
 [local marketplace documentation](https://developers.openai.com/plugins/build/plugins#how-local-marketplaces-work).
-Start a new Codex session after installation and confirm both companion skills
+Start a new Codex session after installation and confirm the companion skills
 are available. Installation does not select Herdr execution or authorize workers.
 
 Local installation was checked with isolated Codex and Claude Code configuration
@@ -259,8 +282,8 @@ remains unverified.
 
 ### Preflight bootstrap and installation selection
 
-Resolve the loaded `hc-workflow` or `hc-first` skill through the executing host's
-catalog or trusted hook, following symlinks to its real absolute path. Its root
+Resolve the loaded companion skill through the executing host's catalog or
+trusted hook, following symlinks to its real absolute path. The plugin root
 holds `skills/` and `scripts/`. Shared initial discovery remains owned by zstack;
 the companion validates host selection before importing the selected probe.
 Never select the newest-looking cache directory or search other checkouts.

@@ -9,7 +9,7 @@ check:
 # Install or update the tabs mod, hc templates, and both host plugins.
 install: update-sidebar install-templates install-codex install-claude-code
 
-# Install or update hc role templates with the CLI default models.
+# Install or update hc role templates with their default models.
 install-templates:
     node scripts/install.mjs install --target templates --home "${XDG_CONFIG_HOME:-$HOME/.config}/herdr-core" --apply
 

@@ -123,8 +123,8 @@ test('the recommended compound forms keep a failure visible', () => {
   assert.equal(status('bash', '-o', 'pipefail', '-c', 'false | tee /dev/null'), 1);
 });
 
-test('Claude templates allow only end-of-options sends', () => {
-  for (const file of files('templates').filter(name => name.includes('claude'))) {
+test('Claude worker templates allow only end-of-options sends', () => {
+  for (const file of ['templates/comment-sicko-claude.md', 'templates/z-agent-claude.md']) {
     const command = /^command: (.*)$/m.exec(read(file))[1];
     // Quoting can hide `--force` from any deny pattern; after `--`, hc parses it as text.
     assert.match(command, /--allowedTools 'Bash\(hc send -- \*\)'$/, file);
