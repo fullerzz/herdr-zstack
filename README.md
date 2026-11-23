@@ -13,6 +13,7 @@ Herdr-specific workflows and native UI for zstack. This repository owns integrat
 - [Playbook table](skills/hc-workflow/references/playbooks.md): one hc delta table for z-mode's delegating, pause, pickup and cleanup playbooks. Each step maps to an hc operation and record fields, or stays direct.
 - [Explorer and runner deltas](skills/hc-workflow/references/explorers.md): when how, why, blast-radius and architect stay direct under Herdr, and how their coverage steps launch restricted read-only hc members.
 - [Other-provider seats](skills/hc-workflow/references/seats.md): interactive hc seats for arena's judge and interrogate's other-provider adversary, replacing zstack's one-shot seat launch when Herdr is selected.
+- On request, Codex or Claude Code can launch the other harness for an independent, read-only code review through hc. See [alternate harness review](skills/alt-harness-review/SKILL.md).
 - [Role templates](templates/): `z-agent` and `comment-sicko` as hc templates for Claude Code and Codex, installed with `--target templates`; see [installation](docs/installation.md#hc-role-templates).
 - [Worker lifecycle](docs/worker-lifecycle.md): scoped single-worker execution and pause/pickup reconciliation, with [local pilot evidence](docs/validation.md#issue-3-single-worker-hc-pilot--2026-10-31) and [recovery proof limits](docs/validation.md#issue-4-pause-and-pickup-reconciliation--2026-10-31).
 
@@ -38,15 +39,6 @@ The Task & Evidence panel has been removed. `just update-sidebar` deletes an unm
 
 ## Direction
 
-Prove one complete flow before expanding: establish task → launch one authorized worker through hc → collect result → verify revision → present evidence → pause and reconcile on pickup. Keep durable supervision outside layout-owned mod lifetimes.
+The [roadmap](docs/roadmap.md) tracks milestones and decisions. The [port inventory](docs/port-inventory.md) records the original zstack 0.22.0 baseline.
 
-The [roadmap](docs/roadmap.md) ports zstack's Herdr-specific workflows onto hc and adds hc deltas for its delegating skills. The [port inventory](docs/port-inventory.md) covers the installed zstack 0.22.0 baseline and records the planned execution changes; roadmap decisions D1–D7 are accepted. The completed foundation issues:
-
-1. [Execution contract and zstack compatibility](https://github.com/fullerzz/herdr-zstack/issues/1)
-2. [Task records and verification receipts](https://github.com/fullerzz/herdr-zstack/issues/2)
-3. [Single-worker hc pilot](https://github.com/fullerzz/herdr-zstack/issues/3)
-4. [Pause and pickup reconciliation](https://github.com/fullerzz/herdr-zstack/issues/4)
-5. [Connect the evidence panel to tasks](https://github.com/fullerzz/herdr-zstack/issues/5)
-6. [Reproducible installation and CI](https://github.com/fullerzz/herdr-zstack/issues/6)
-
-See [repository contract](AGENTS.md), [migration record](docs/migration.md), [validation](docs/validation.md), and [provenance](NOTICE.md).
+See the [repository contract](AGENTS.md), [validation](docs/validation.md), and [provenance](NOTICE.md).

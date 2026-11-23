@@ -1,6 +1,6 @@
 # Provenance
 
-Task & Evidence was authored in the local fullerzz/agent-skills checkout on 2026-10-31 and migrated here before its first commit. Its panel was removed on 2026-11-03; its pure task-record, decision-log and run-index helpers remain in `records/`. It was uncommitted work on source checkout HEAD `8a4963d0ec4708a526b9cab9569299b993e84d96`; that commit does not contain the mod.
+Task & Evidence was authored in the local fullerzz/agent-skills checkout on 2026-10-31 and migrated here before its first commit. The runtime, seven tests and usage documentation moved from `integrations/herdr-app/task-evidence/` to `mods/task-evidence/`. Its panel was removed on 2026-11-03; its pure task-record, decision-log and run-index helpers remain in `records/`. It was uncommitted work on source checkout HEAD `8a4963d0ec4708a526b9cab9569299b993e84d96`; that commit does not contain the mod.
 
 The source repository's MIT license and Lauren Tan copyright notice are retained in `LICENSES/zstack-MIT.txt`. This repository's existing Zach Fuller MIT license remains unchanged. Generated host typings are not included.
 
